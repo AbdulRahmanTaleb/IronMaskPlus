@@ -722,8 +722,6 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     str_map_add(positions_map, strdup(e->dst));
   }
 
-  printf("ended loop on equations \n");
-
   // Moving outputs to the end
   StrMap* outputs_map = make_str_map("outputs expanded");
   if(nb_duplications == -1){
@@ -755,8 +753,6 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     str_map_remove(outputs_map, deps->names[end_idx]);
     end_idx--;
   }
-
-  printf("ended loop on outputs map\n");
 
   // Finding outputs and swapping them to the end
 #define SWAP(_type, _v1, _v2) {                 \
