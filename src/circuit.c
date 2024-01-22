@@ -116,34 +116,39 @@ void compute_rands_usage(Circuit* c) {
   //
   // (this could have been done in the previous step, but it seems
   // more maintainable to do it separately)
+  bool br = false;
   for (int i = 0; i < deps->length; i++) {
-    cpt=0;
     Dependency* dep = deps->deps_exprs[i];
     for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
+      cpt=0;
       if (dep[j] && !i1_rands[j] && !i2_rands[j] && !out_rands[j]) {
         // The random i does not have a group yet -> searching for
         // other randoms in the dependency (one of them should have a
         // group).
         for (int k = first_rand_idx; k < first_rand_idx+nb_rands; k++) {
+          br = false;
           if (dep[k] && i1_rands[k]) {
             i1_rands[j] |= dep[j];
             cpt++;
+            br = true;
           } 
           if (dep[k] && i2_rands[k]) {
             i2_rands[j] |= dep[j];
             cpt++;
+            br = true;
           } 
           if (dep[k] && out_rands[k]) {
             out_rands[j] |= dep[j];
             cpt++;
+            br = true;
           }
+          if(br) break;
         }
       }
-    }
-
-    if(cpt > 1){
-      fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[i]);
-      exit(EXIT_FAILURE);
+      if(cpt > 1){
+        fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[i]);
+        exit(EXIT_FAILURE);
+      }
     }
   }
 
@@ -355,7 +360,7 @@ void print_circuit(const Circuit* c) {
 
     int non_mult_deps_count = deps_size - mult_deps->length;
     int refresh_i1 = 0, refresh_i2 = 0, refresh_out = 0;
-    for (int i = deps->first_rand_idx; i < non_mult_deps_count; i++) {
+    for (int i = deps->first_rand_idx; i < non_mult_deps_count-1; i++) {
       refresh_i1 += c->i1_rands[i];
       refresh_i2 += c->i2_rands[i];
       refresh_out += c->out_rands[i];

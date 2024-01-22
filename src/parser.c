@@ -563,8 +563,15 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   mult_deps->deps = malloc(mult_count * sizeof(*(mult_deps->deps)));
 
   DependencyList* deps = malloc(sizeof(*deps));
-  deps->length         = circuit_size + randoms->next_val +
-                         in->next_val * shares;
+  if(nb_duplications != -1){
+    deps->length         = circuit_size + randoms->next_val +
+                            in->next_val * shares * nb_duplications + 2;
+  }
+  else{
+    deps->length         = circuit_size + randoms->next_val +
+                         in->next_val * shares + 2;
+  }
+  
   deps->deps_size      = deps_size;
   deps->first_rand_idx = in->next_val;
   deps->deps           = malloc(deps->length * sizeof(*deps->deps));
@@ -755,17 +762,18 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   }
 
   // Finding outputs and swapping them to the end
-#define SWAP(_type, _v1, _v2) {                 \
-    _type _tmp = _v1;                           \
-    _v1 = _v2;                                  \
-    _v2 = _tmp;                                 \
-  }
-#define SWAP_DEPS(i1,i2) {                                          \
-    SWAP(char*, deps->names[i1], deps->names[i2]);                  \
-    SWAP(DepArrVector*, deps->deps[i1], deps->deps[i2]);             \
-    SWAP(Dependency*, deps->deps_exprs[i1], deps->deps_exprs[i2]);  \
-    SWAP(int, weights[i1], weights[i2]);                            \
-  }
+#define SWAP(_type, _v1, _v2) {               \
+  _type _tmp = _v1;                           \
+  _v1 = _v2;                                  \
+  _v2 = _tmp;                                 \
+}
+#define SWAP_DEPS(i1,i2) {                                        \
+  SWAP(char*, deps->names[i1], deps->names[i2]);                  \
+  SWAP(DepArrVector*, deps->deps[i1], deps->deps[i2]);            \
+  SWAP(Dependency*, deps->deps_exprs[i1], deps->deps_exprs[i2]);  \
+  SWAP(int, weights[i1], weights[i2]);                            \
+}
+
   for (int i = end_idx-1; i >= 0; i--) {
     if (str_map_contains(outputs_map, deps->names[i])) {
       // Shifting all elements between |i| and |end_idx| to the left
@@ -816,8 +824,6 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   free_str_map(positions_map);
   free_dep_map(deps_map);
   free_eq_list(eqs);
-
-  exit(EXIT_FAILURE);
 
   return c;
 }

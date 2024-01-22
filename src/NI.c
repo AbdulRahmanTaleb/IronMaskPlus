@@ -70,8 +70,12 @@ int compute_NI(Circuit* circuit, int cores, int t) {
     return compute_NI_constr(circuit, t);
   }
 
+  printf("here\n");
+
   DimRedData* dim_red_data = remove_elementary_wires(circuit);
+
   advanced_dimension_reduction(circuit);
+
   bool has_random = true;
   if (!circuit->has_input_rands) {
     has_random = false;
