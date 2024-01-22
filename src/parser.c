@@ -149,6 +149,81 @@ void reverse_str_map(StrMap* map) {
 
 
 /* ***************************************************** */
+/*              String/String Vectors map utilities      */
+/* ***************************************************** */
+
+typedef struct _StrVecMapElem {
+  char* key;
+  StringVector * vec;
+  struct _StrVecMapElem* next;
+} StrVecMapElem;
+
+typedef struct _StrVecMap {
+  char* name;
+  StrVecMapElem* head;
+  int length;
+} StrVecMap;
+
+StrVecMap* make_str_vec_map(char* name) {
+  StrVecMap* map = malloc(sizeof(*map));
+  map->name = strdup(name);
+  map->head = NULL;
+  map->length = 0;
+  return map;
+}
+
+void str_vec_map_add(StrVecMap* map, char* key, char* var) {
+  StrVecMapElem* curr = map->head;
+
+  while (curr) {
+    if (strcmp(curr->key, key) == 0) {
+      StringVector_push(curr->vec, strdup(var));
+      return;
+    }
+    curr = curr->next;
+  }
+
+  StrVecMapElem* e = malloc(sizeof(*e));
+  e->key = strdup(key);
+  e->vec = StringVector_make();
+  StringVector_push(e->vec, strdup(var));
+  e->next = map->head;
+  map->head = e;
+  map->length++;
+  
+}
+
+void free_str_vec_map(StrVecMap* map) {
+  StrVecMapElem* e = map->head;
+  while (e) {
+    free(e->key);
+    StringVector_deep_free(e->vec);
+    StrMapElem* next = e->next;
+    free(e);
+    e = next;
+  }
+  free(map->name);
+  free(map);
+}
+
+void print_str_vec_map(StrVecMap* map) {
+  printf("%s with %d elements: {\n",map->name, map->length);
+  StrVecMapElem* e = map->head;
+  while (e) {
+    printf("%s:",e->key);
+    for(int i=0; i< e->vec->length; i++){
+      printf("%s, ", e->vec->content[i]);
+    }
+    printf("\n");
+    e = e->next;
+  }
+  printf("}\n");
+}
+
+
+
+
+/* ***************************************************** */
 /*             Utilities related to equations            */
 /* ***************************************************** */
 
@@ -438,7 +513,7 @@ Circuit* parse_file(char* filename, bool glitch, bool transition) {
   print_str_map(in);
   print_str_map(randoms);
   print_str_map(out);
-  print_eq_list(eqs);
+  //print_eq_list(eqs);
 
   Circuit* c = gen_circuit(shares, eqs, in, randoms, out, glitch, transition, nb_duplications);
 
@@ -501,6 +576,27 @@ DepMapElem* dep_map_get_nofail(DepMap* map, char* dep) {
       return curr;
     }
     curr = curr->next;
+  }
+  return NULL;
+}
+
+char* dep_get_from_expr_nofail(DependencyList* deps, int length, Dependency* dep, DepArrVector* dep_arr, int deps_size) {
+  if(dep_arr->length > 1){
+    return NULL;
+  }
+
+  for(int i=0; i<length; i++){
+    if(deps->deps[i]->length == 1){
+      bool eq = true;
+      for(int j=0; j<deps_size; j++){
+        eq = eq && (dep[j] == deps->deps_exprs[i][j]);
+        eq = eq && (dep[j] == deps->deps[i]->content[0][j]);
+      }
+
+      if(eq){
+        return deps->names[i];
+      }
+    }
   }
   return NULL;
 }

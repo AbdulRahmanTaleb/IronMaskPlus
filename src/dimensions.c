@@ -94,7 +94,7 @@ typedef struct _hashmap {
 static HashMap* init_map(Circuit* circuit) {
   int deps_size = circuit->deps->deps_size;
   int first_rand_idx = circuit->deps->first_rand_idx;
-  int non_mult_deps_count = deps_size - circuit->deps->mult_deps->length;
+  int non_mult_deps_count = deps_size - circuit->deps->mult_deps->length - 1;
   HashMap* map    = malloc(sizeof(*map));
   map->content    = calloc(HASH_SIZE, sizeof(*(map->content)));
   map->deps_size  = deps_size;
@@ -303,7 +303,7 @@ VarVector* remove_from_subcircuit(VarVector* subcircuit, VarVector* to_remove) {
 int is_zero_or_elementary(Circuit* circuit, Dependency* dep) {
   DependencyList* deps = circuit->deps;
   int deps_size = deps->deps_size;
-  int non_mult_deps_count = deps->deps_size - deps->mult_deps->length;
+  int non_mult_deps_count = deps->deps_size - deps->mult_deps->length - 1;
 
   int elem_count = 0;
   for (int i = 0; i < circuit->secret_count; i++) {
@@ -418,7 +418,7 @@ int has_one_more_mult(Circuit* circuit, Var larger, Var smaller) {
   DependencyList* deps = circuit->deps;
   Dependency* dep_larger  = deps->deps[larger]->content[0];
   Dependency* dep_smaller = deps->deps[smaller]->content[0];
-  int non_mult_deps_count = deps->deps_size - deps->mult_deps->length;
+  int non_mult_deps_count = deps->deps_size - deps->mult_deps->length - 1;
   int first_rand_idx = deps->first_rand_idx;
 
   for (int i = first_rand_idx; i < non_mult_deps_count; i++) {
@@ -675,13 +675,13 @@ void add_to_elem_array(Circuit* circuit, Var dep_idx,
   DependencyList* deps    = circuit->deps;
   Dependency* dep         = deps->deps[dep_idx]->content[0];
   int deps_size           = deps->deps_size;
-  int non_mult_deps_count = deps_size - deps->mult_deps->length;
+  int non_mult_deps_count = deps_size - deps->mult_deps->length - 1;
 
   if (add_to_elem_array_nomult(circuit, dep_idx, elementary_wires)) return;
 
-  assert(!circuit->has_input_rands);
+  //assert(!circuit->has_input_rands);
 
-  for (int i = non_mult_deps_count; i < deps_size; i++) {
+  for (int i = non_mult_deps_count; i < deps_size-1; i++) {
     if (dep[i]) {
       MultDependency* mult_dep = deps->mult_deps->deps[i-non_mult_deps_count];
       add_to_elem_array_nomult(circuit, mult_dep->left_idx, elementary_wires);
@@ -690,31 +690,94 @@ void add_to_elem_array(Circuit* circuit, Var dep_idx,
   }
 }
 
+bool _is_mult(Circuit * circuit, Dependency * dep){
+  bool is_mult = true;
+  for(int i=0; i<circuit->random_count + circuit->secret_count; i++){
+    is_mult = is_mult && (dep[i] == 0);
+  }
+  is_mult = is_mult && (dep[circuit->deps->deps_size-1] == 0);
+
+  int count_mult = 0;
+  for(int i=circuit->random_count + circuit->secret_count; 
+      i < circuit->deps->deps_size-1; i++){
+
+    count_mult += dep[i];
+  }
+
+  return is_mult && (count_mult == 1);
+}
+
+int get_mult_idx(Circuit * circuit, Dependency * dep){
+  for(int i=circuit->random_count + circuit->secret_count; 
+      i < circuit->deps->deps_size-1; i++){
+
+    if(dep[i] == 1){
+      return i - (circuit->random_count + circuit->secret_count);
+    }
+  }
+
+  fprintf(stderr, "Error in multiplication formatting\n");
+  exit(EXIT_FAILURE);
+
+}
+
+bool _is_elementary_multiplication(Circuit * circuit, MultDependency * mult_dep){
+
+  Dependency * left_dep = mult_dep->left_ptr;
+  Dependency * right_dep = mult_dep->right_ptr;
+  DependencyList* deps    = circuit->deps;
+
+  for (int i = deps->first_rand_idx; i < deps->deps_size-1; i++) {
+    if (left_dep[i]) return 0;
+    if (right_dep[i]) return 0;
+  }
+
+  int count_left_0 = __builtin_popcount(left_dep[0]);
+  int count_left_1 = __builtin_popcount(left_dep[1]);
+  int count_right_0 = __builtin_popcount(right_dep[0]);
+  int count_right_1 = __builtin_popcount(right_dep[1]);
+
+  return ((count_left_0 == 1 ) && (count_left_1 == 0) && (count_right_0 == 0) && (count_right_1 == 1))
+         || ((count_left_0 == 0 ) && (count_left_1 == 1) && (count_right_0 == 1) && (count_right_1 == 0));
+}
+
+
 bool is_elementary(Circuit* circuit, Dependency* dep) {
   DependencyList* deps    = circuit->deps;
   int deps_size           = deps->deps_size;
   int first_rand_idx      = deps->first_rand_idx;
   int has_input_rands     = circuit->has_input_rands;
-  int non_mult_deps_count = deps_size - deps->mult_deps->length;
+  int non_mult_deps_count = deps_size - deps->mult_deps->length - 1;
 
   int last_idx = has_input_rands ? deps_size : non_mult_deps_count;
-  for (int i = first_rand_idx; i < last_idx; i++) {
+
+  // make sure it does not contain any random values
+  for (int i = first_rand_idx; i < non_mult_deps_count; i++) {
     if (dep[i]) return 0;
   }
 
-  int mult_count = 0;
-  for (int i = non_mult_deps_count; i < deps_size; i++) {
-    if (dep[i]) mult_count++;
-  }
-  if (mult_count > 1) return 0;
-
+  // make sure that it contains at most 1 input share
   int input_count = 0;
   for (int i = 0; i < first_rand_idx; i++) {
     if (dep[i]) input_count += __builtin_popcount(dep[i]);
   }
+  if (input_count > 1) return 0;
+
+  // ensure that if it is a multiplication, then it is between two input shares
+  int mult_count = 0;
+  for (int i = non_mult_deps_count; i < deps_size-1; i++) {
+    if (dep[i]){
+      mult_count++;
+      if(!_is_elementary_multiplication(circuit, deps->mult_deps->deps[i-non_mult_deps_count])){
+        return 0;
+      };
+    } 
+  }
+  if (mult_count > 1) return 0;
 
   assert(mult_count == 0 || input_count == 0);
-  return mult_count + input_count == 1;
+
+  return 1;
 }
 
 // Removes elementary deterministic wires from |circuit|. This
@@ -742,7 +805,6 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
   DependencyList* new_deps = malloc(sizeof(*new_deps));
   new_deps->deps_size      = deps->deps_size;
   new_deps->first_rand_idx = deps->first_rand_idx;
-  new_deps->mult_deps      = deps->mult_deps;
   new_deps->length         = 0;
   new_deps->deps           = malloc(deps->length * sizeof(*new_deps->deps));
   new_deps->deps_exprs     = malloc(deps->length * sizeof(*new_deps->deps_exprs));
@@ -750,10 +812,14 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
   new_deps->contained_secrets = malloc(deps->length * sizeof(*new_deps->contained_secrets));
   new_deps->bit_deps       = malloc(deps->length * sizeof(*new_deps->bit_deps));
 
+  new_deps->mult_deps      = malloc(sizeof(*new_deps->mult_deps));
+  new_deps->mult_deps->length = 0;
+  new_deps->mult_deps->deps = malloc(deps->mult_deps->length * sizeof(*new_deps->mult_deps->deps));
 
   for (int i = 0; i < deps->length; i++) {
     Dependency* dep = deps->deps[i]->content[0];
     if (deps->deps[i]->length == 1 && is_elementary(circuit, dep)) {
+      printf("%s is elementary\n", deps->names[i]);
       add_to_elem_array(circuit, i, data_ret->elementary_wires);
       VarVector_push(data_ret->removed_wires, i);
       continue;
@@ -766,6 +832,11 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
     new_deps->contained_secrets[new_deps->length] = deps->contained_secrets[i];
     new_deps->bit_deps[new_deps->length]   = deps->bit_deps[i];
     new_deps->length++;
+
+    if(_is_mult(circuit, dep)){
+      new_deps->mult_deps->deps[new_deps->mult_deps->length] = deps->mult_deps->deps[get_mult_idx(circuit, dep)];
+      new_deps->mult_deps->length++;
+    }
   }
 
   circuit->deps = new_deps;
@@ -773,6 +844,14 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
 
   printf("Dimension reduction: old circuit: %d vars -- new circuit: %d vars.\n\n",
          deps->length, new_deps->length);
+
+  printf("Removed variables : {");
+  for(int i=0; i<data_ret->removed_wires->length; i++){
+    int idx = data_ret->removed_wires->content[i];
+
+    printf("%s ", data_ret->old_circuit->deps->names[idx]);
+  }
+  printf("}\n");
 
   return data_ret;
 }
@@ -805,22 +884,31 @@ void remove_randoms(Circuit* circuit) {
   new_deps->contained_secrets = malloc(deps->length * sizeof(*new_deps->contained_secrets));
   new_deps->bit_deps       = malloc(deps->length * sizeof(*new_deps->bit_deps));
 
-  int non_mult_deps_count = deps->deps_size - deps->mult_deps->length;
+  int non_mult_deps_count = deps->deps_size - deps->mult_deps->length - 1;
 
+  bool is_random = false;
+  int rand_count = 0;
   for (int i = 0; i < deps->length; i++) {
-    if (i < non_mult_deps_count - circuit->secret_count) {
-      // Checking that it's actually a random, just to be sure.
-      int rand_count = 0;
-      assert(deps->deps[i]->length == 1);
-      for (int j = circuit->secret_count; j < non_mult_deps_count; j++) {
-        rand_count += deps->deps[i]->content[0][j];
-      }
-      assert(rand_count == 1);
-      for (int j = non_mult_deps_count; j < deps->deps_size; j++) {
-        assert(!deps->deps[i]->content[0][j]);
-      }
+
+    is_random = true;
+    rand_count = 0;
+    is_random = is_random && (deps->deps[i]->length == 1);
+    for(int j=0; j< deps->first_rand_idx; j++){
+      is_random = is_random && (deps->deps[i]->content[0][j] == 0);
+    }
+    for (int j = non_mult_deps_count; j < deps->deps_size; j++) {
+      is_random = is_random && (deps->deps[i]->content[0][j] == 0);
+    }
+    for(int j=deps->first_rand_idx; j<non_mult_deps_count ; j++){
+      rand_count += deps->deps[i]->content[0][j];
+    }
+    is_random = is_random && (rand_count == 1);
+
+    if(is_random){
+      printf("%s is a random\n", deps->names[i]);
       continue;
     }
+
     new_deps->names[new_deps->length]      = deps->names[i];
     new_deps->deps[new_deps->length]       = deps->deps[i];
     new_deps->deps_exprs[new_deps->length] = deps->deps_exprs[i];
@@ -835,7 +923,7 @@ void remove_randoms(Circuit* circuit) {
   printf("Randoms removed. old circuit: %d vars -- new circuit: %d vars.\n\n",
          deps->length, new_deps->length);
 
-  print_circuit(circuit);
+  //print_circuit(circuit);
 }
 
 

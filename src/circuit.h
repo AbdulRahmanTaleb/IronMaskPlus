@@ -108,5 +108,7 @@ void compute_rands_usage(Circuit* c);
 void compute_contained_secrets(Circuit* c);
 void compute_bit_deps(Circuit* circuit);
 void print_circuit(const Circuit* c);
+
+void print_circuit_after_dim_red(const Circuit* c, const Circuit* c_old);
 void free_circuit(Circuit* c);
 Circuit* shallow_copy_circuit(Circuit* c);

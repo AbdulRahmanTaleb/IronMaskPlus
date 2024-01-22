@@ -70,17 +70,23 @@ int compute_NI(Circuit* circuit, int cores, int t) {
     return compute_NI_constr(circuit, t);
   }
 
-  printf("here\n");
-
   DimRedData* dim_red_data = remove_elementary_wires(circuit);
 
+  printf("here 0\n");
+
   advanced_dimension_reduction(circuit);
+
+  printf("here 1\n");
 
   bool has_random = true;
   if (!circuit->has_input_rands) {
     has_random = false;
     remove_randoms(circuit);
   }
+
+  print_circuit_after_dim_red(circuit, dim_red_data->old_circuit);
+
+  printf("here\n");
 
   struct callback_data data = { .ni_order = t };
 
@@ -103,6 +109,7 @@ int compute_NI(Circuit* circuit, int cores, int t) {
                                      NULL,  // incompr_tuples
                                      display_failure,
                                      (void*)&data);
+    printf("finish\n");
     if (has_failure) break;
   }
 

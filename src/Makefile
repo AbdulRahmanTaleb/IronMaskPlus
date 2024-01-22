@@ -1,6 +1,6 @@
 CC = clang
 RM = rm -f
-CFLAGS = -Wall -Wextra -O3 -march=native -pthread -mlzcnt
+CFLAGS = -Wall -Wextra -O3 -march=native -pthread -mlzcnt -gdwarf-4
 LDLIBS = -lm -lgmp
 
 SRC = circuit.c coeffs.c combinations.c constructive.c constructive-mult.c \

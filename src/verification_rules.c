@@ -380,7 +380,7 @@ static int is_failure_with_randoms(const Circuit* circuit,
   int random_count = circuit->random_count + secret_count;
   int deps_size = deps->deps_size;
   int mult_count = deps->mult_deps->length;
-  int non_mult_deps_count = deps_size - mult_count;
+  int non_mult_deps_count = deps_size - mult_count - 1;
   int bit_rand_len = 1 + random_count / 64;
   int bit_mult_len = 1 + mult_count / 64;
 
@@ -609,7 +609,7 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
   int secret_count        = c->secret_count;
   int share_count         = c->share_count;
   int inputs_real_count   = secret_count * share_count;
-  int non_mult_deps_count = c->deps->deps_size - c->deps->mult_deps->length;
+  int non_mult_deps_count = c->deps->deps_size - c->deps->mult_deps->length - 1;
   Dependency* left  = mult->left_ptr;
   Dependency* right = mult->right_ptr;
 
@@ -1050,7 +1050,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
     return 0;
   }
 
-  // Stuffs to perform the Gaussian elimination on the fly.
+  // Stuff to perform the Gaussian elimination on the fly.
   // That quite a bit of "stuffs" because 3 Gaussian eliminations are
   // performed on the fly (in the case of multiplication gadgets): one
   // on the output randoms, one on the input randoms before
@@ -1203,7 +1203,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
             int mult_idx_in_elem = __builtin_ia32_lzcnt_u64(mult_elem);
             mult_elem &= ~(1ULL << (63-mult_idx_in_elem));
             int mult_idx = i * 64 + (63-mult_idx_in_elem);
-            Dependency* this_secret_shares = deps->mult_deps->deps[mult_idx]->contained_secrets;
+            Dependency* this_secret_shares = dim_red_data->old_circuit->deps->mult_deps->deps[mult_idx]->contained_secrets;
             secret_share_0 |= this_secret_shares[0];
             secret_share_1 |= this_secret_shares[1];
           }
@@ -1361,6 +1361,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
 
   process_success:;
     if (only_one_tuple) break;
+
   } while (((new_first_invalid_local_deps_index =
              next_comb(curr_comb, sub_comb_len, last_var, prefix)) >= 0) &&
            (tuple_count == -1ULL || --tuple_count != 0));
@@ -2060,7 +2061,7 @@ static int is_failure_with_randoms_freeSNI_IOS(const Circuit* circuit,
   int random_count = circuit->random_count + secret_count;
   int deps_size = deps->deps_size;
   int mult_count = deps->mult_deps->length;
-  int non_mult_deps_count = deps_size - mult_count;
+  int non_mult_deps_count = deps_size - mult_count - 1;
   int bit_rand_len = 1 + random_count / 64;
   int bit_mult_len = 1 + mult_count / 64;
 
