@@ -79,6 +79,7 @@ typedef struct _circuit {
   int share_count;     // Number of shares
   int random_count;    // Number of random variables
   int all_shares_mask; // = (1 << share_count) - 1
+  int nb_duplications;
   int* weights;        // Array of size |circuit_length|
   int contains_mults;  // 1 if the circuit contains multiplications, 0 otherwise
   int total_wires;     // Total number of wires

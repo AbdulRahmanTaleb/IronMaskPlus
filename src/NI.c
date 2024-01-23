@@ -84,7 +84,7 @@ int compute_NI(Circuit* circuit, int cores, int t) {
     remove_randoms(circuit);
   }
 
-  print_circuit_after_dim_red(circuit, dim_red_data->old_circuit);
+  //print_circuit_after_dim_red(circuit, dim_red_data->old_circuit);
 
   printf("here\n");
 

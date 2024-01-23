@@ -551,6 +551,7 @@ void update_mult_deps(const Circuit* c, BitDepVector** bit_deps,
       has_i2_rand = 1;
     }
   }
+
   if (has_i1_rand) {
     deps1[*deps1_length]->secrets[0] = curr_dep->secrets[0];
     deps1[*deps1_length]->secrets[1] = curr_dep->secrets[1];
@@ -1011,7 +1012,9 @@ int _verify_tuples(const Circuit* circuit, // The circuit
 
   // Used when spliting the tuple in 2 (vars depending on 1st and 2nd
   // output)
-  int deps12_max_length = comb_len * deps->mult_deps->length * 2; // TODO: smaller?
+  //printf("%d\n", deps->mult_deps->length);
+  //exit(EXIT_FAILURE);
+  int deps12_max_length = deps->length * 5; // TODO: smaller?
   BitDep* deps1[deps12_max_length];
   BitDep* deps2[deps12_max_length];
   for (int i = 0; i < deps12_max_length; i++) {
@@ -1227,6 +1230,8 @@ int _verify_tuples(const Circuit* circuit, // The circuit
           goto process_success;
         }
       }
+
+      printf("HERE\n");
 
       // 2- Split in 2 tuples based on circuit->i1_rands and circuit->i2_rands
       int first_invalid_mult_index_in_local_deps =

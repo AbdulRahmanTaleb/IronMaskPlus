@@ -289,6 +289,71 @@ void print_eq_list(EqList* l) {
   }
 }
 
+EqListElem * get_eq_list(EqList* l, char* dst) {
+  EqListElem * h = l->head;
+  while(h){
+    if(strcmp(h->dst, dst) == 0){
+      return h;
+    }
+    h = h->next;
+  }
+  return NULL;
+}
+
+void get_eq_expr(EqList* l, char* dst){
+  EqListElem * x = get_eq_list(l, dst);
+  if(x){
+    if ((x->expr->op != Asgn) && (x->expr->op != Mult))
+      printf(" ( ");
+
+    get_eq_expr(l, x->expr->left);
+
+    if(x->expr->op != Asgn){
+      if(x->expr->op == Add){
+        printf(" + ");
+      }
+      else{
+        printf(" * ");
+      }
+      get_eq_expr(l, x->expr->right);
+    }
+
+    if ((x->expr->op != Asgn) && (x->expr->op != Mult))
+      printf(" ) ");
+
+    return;
+  }
+
+  /*if(dst[2] == '_'){
+    dst[2] = '\0';
+  }*/
+  printf("%s ", dst);
+}
+
+void get_eq_expr_inter(EqList* l, char* dst){
+  EqListElem * x = get_eq_list(l, dst);
+  if(x){
+    printf("%s = %s", dst, x->expr->left);
+
+    if(x->expr->op != Asgn){
+      printf("%s %s\n", (x->expr->op == Mult) ? "*" : "+", x->expr->right);
+    }
+    else{
+      printf("\n");
+    }
+    printf("\n");
+    get_eq_expr_inter(l, x->expr->left);
+    
+    
+    if(x->expr->op != Asgn){
+      printf("\n");
+      get_eq_expr_inter(l, x->expr->right);
+    }
+    
+    return;
+  }
+}
+
 EqListElem* _reverse_eq_list(EqListElem* el, EqListElem* prev) {
   if (!el->next) {
     el->next = prev;
@@ -444,7 +509,7 @@ Circuit* parse_file(char* filename, bool glitch, bool transition) {
     exit(EXIT_FAILURE);
   }
 
-  int order = -1, shares = -1, nb_duplications = -1;
+  int order = -1, shares = -1, nb_duplications = 1;
   StrMap* in = make_str_map("in");
   StrMap* randoms = make_str_map("randoms");
   StrMap* out = make_str_map("out");
@@ -528,6 +593,7 @@ Circuit* parse_file(char* filename, bool glitch, bool transition) {
 typedef struct _DepMapElem {
   char* key;
   Dependency*  std_dep;
+  Dependency dup_dep; // = 0 when nb_duplications <= 1
   DepArrVector* glitch_trans_dep;
   struct _DepMapElem* next;
 } DepMapElem;
@@ -545,10 +611,11 @@ DepMap* make_dep_map(char* name) {
 }
 
 // Warning: takes ownership of |dep|; don't free it after calling map_add!
-void dep_map_add(DepMap* map, char* str, Dependency* std_dep, DepArrVector* glitch_trans_dep) {
+void dep_map_add(DepMap* map, char* str, Dependency* std_dep, Dependency dup_dep, DepArrVector* glitch_trans_dep) {
   DepMapElem* e = malloc(sizeof(*e));
   e->key = str;
   e->std_dep = std_dep;
+  e->dup_dep = dup_dep;
   e->glitch_trans_dep = glitch_trans_dep;
   e->next = map->head;
   map->head = e;
@@ -643,6 +710,14 @@ int count_mults(EqList* eqs) {
   return total;
 }
 
+bool is_dep_constant(Dependency * dep, int length){
+  bool is_constant = true;
+  for(int i=0; i<length-1; i++){
+    is_constant = is_constant && (dep[i] == 0);
+  }
+  return is_constant;
+}
+
 
 Circuit* gen_circuit(int shares, EqList* eqs,
                      StrMap* in, StrMap* randoms, StrMap* out,
@@ -659,14 +734,8 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   mult_deps->deps = malloc(mult_count * sizeof(*(mult_deps->deps)));
 
   DependencyList* deps = malloc(sizeof(*deps));
-  if(nb_duplications != -1){
-    deps->length         = circuit_size + randoms->next_val +
-                            in->next_val * shares * nb_duplications + 2;
-  }
-  else{
-    deps->length         = circuit_size + randoms->next_val +
-                         in->next_val * shares + 2;
-  }
+  deps->length         = circuit_size + randoms->next_val +
+                          in->next_val * shares * nb_duplications + 2;
   
   deps->deps_size      = deps_size;
   deps->first_rand_idx = in->next_val;
@@ -674,7 +743,7 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   deps->deps_exprs     = malloc(deps->length * sizeof(*deps->deps_exprs));
   deps->names          = malloc(deps->length * sizeof(*deps->names));
   deps->mult_deps      = mult_deps;
-
+   
   DepMap* deps_map = make_dep_map("Dependencies");
 
   int* weights = calloc(deps->length, sizeof(*weights));
@@ -693,13 +762,14 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     deps->deps[add_idx]       = dep_arr;
     deps->deps_exprs[add_idx] = dep;
     deps->names[add_idx]      = strdup(name);
-    dep_map_add(deps_map, name, dep, dep_arr);
+    dep_map_add(deps_map, name, dep, 0, dep_arr);
     str_map_add(positions_map, strdup(name));
+
     add_idx += 1;
   }
 
   // Initializing dependencies with inputs
-  if(nb_duplications == -1){
+  if(nb_duplications <= 1){
     for (StrMapElem* e = in->head; e != NULL; e = e->next, dep_bit_idx++) {
       int len = strlen(e->key) + 1 + 2; // +1 for '\0' and +2 for share number
       for (int i = 0; i < shares; i++) {
@@ -712,7 +782,7 @@ Circuit* gen_circuit(int shares, EqList* eqs,
         deps->deps[add_idx]       = dep_arr;
         deps->deps_exprs[add_idx] = dep;
         deps->names[add_idx]      = strdup(name);
-        dep_map_add(deps_map, name, dep, dep_arr);
+        dep_map_add(deps_map, name, dep, 0, dep_arr);
         str_map_add(positions_map, strdup(name));
         add_idx += 1;
       }
@@ -732,7 +802,7 @@ Circuit* gen_circuit(int shares, EqList* eqs,
           deps->deps[add_idx]       = dep_arr;
           deps->deps_exprs[add_idx] = dep;
           deps->names[add_idx]      = strdup(name);
-          dep_map_add(deps_map, name, dep, dep_arr);
+          dep_map_add(deps_map, name, dep, 1 << j, dep_arr);
           str_map_add(positions_map, strdup(name));
           add_idx += 1;
         }
@@ -750,7 +820,7 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     deps->deps[add_idx]       = dep_arr;
     deps->deps_exprs[add_idx] = dep;
     deps->names[add_idx]      = strdup(e->key);
-    dep_map_add(deps_map, strdup(e->key), dep, dep_arr);
+    dep_map_add(deps_map, strdup(e->key), dep, 0, dep_arr);
     str_map_add(positions_map, strdup(e->key));
   }
 
@@ -760,16 +830,24 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     Dependency* dep;
     DepMapElem* left  = dep_map_get(deps_map, e->expr->left);
     DepMapElem* right = e->expr->op != Asgn ? dep_map_get(deps_map, e->expr->right) : NULL;
+    Dependency dup_dep = 0;
 
     // Computing dependency |dep|
+    // Assign operation
     if (e->expr->op == Asgn) {
       dep = left->std_dep;
-    } else if (e->expr->op == Add) {
+      dup_dep = left->dup_dep;
+    }
+    // Add operation
+    else if (e->expr->op == Add) {
       dep = calloc(deps_size, sizeof(*dep));
       for (int i = 0; i < deps_size; i++) {
         dep[i] = left->std_dep[i] ^ right->std_dep[i];
       }
-    } else { // multiplication
+      dup_dep = left->dup_dep | right->dup_dep;
+    } 
+    // Multiplication operation
+    else { 
       MultDependency* mult_dep = malloc(sizeof(*mult_dep));
       mult_dep->left_ptr  = left->std_dep;
       mult_dep->right_ptr = right->std_dep;
@@ -780,18 +858,29 @@ Circuit* gen_circuit(int shares, EqList* eqs,
       dep = calloc(deps_size, sizeof(*dep));
       dep[linear_deps_size + mult_idx] = 1;
       mult_idx++;
+
+      dup_dep = left->dup_dep | right->dup_dep;
     }
 
     // Taking glitches and transitions into account. We ignore the
     // interaction between glitches and transitions are assume that
     // either glitches or (exclusively) transitions are to be
     // considered.
+
+    bool dup_glitch = false;
+    if(__builtin_popcount(dup_dep) > 1){
+      printf("%s, ", e->dst, dup_dep);
+      dup_glitch = true;
+    }
+
     DepArrVector* dep_arr = DepArrVector_make();
-    if (!glitch || e->anti_glitch) {
+    if ((!glitch || e->anti_glitch) && (!dup_glitch)) {
       DepArrVector_push(dep_arr, dep);
     } else {
       for (int i = 0; i < left->glitch_trans_dep->length; i++) {
-        DepArrVector_push(dep_arr, left->glitch_trans_dep->content[i]);
+        if (!DepArrVector_contains(dep_arr, left->glitch_trans_dep->content[i])) {
+          DepArrVector_push(dep_arr, left->glitch_trans_dep->content[i]);
+        }
       }
       if (right) {
         for (int i = 0; i < right->glitch_trans_dep->length; i++) {
@@ -805,7 +894,18 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     }
     if (transition) {
       DepMapElem* prev_value = dep_map_get(deps_map, e->dst);
-      DepArrVector_push(dep_arr, prev_value->std_dep);
+
+      if(dup_glitch){
+        for(int i=0; i< prev_value->glitch_trans_dep->length; i++){
+          if(!DepArrVector_contains(dep_arr, prev_value->glitch_trans_dep->content[i])){
+            DepArrVector_push(dep_arr, prev_value->glitch_trans_dep->content[i]);
+          }
+        }
+      }
+      else{
+        DepArrVector_push(dep_arr, prev_value->std_dep);
+      }
+      
     }
 
 
@@ -821,13 +921,13 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     deps->deps[add_idx]       = dep_arr;
     deps->deps_exprs[add_idx] = dep;
     deps->names[add_idx]      = strdup(e->dst);
-    dep_map_add(deps_map, strdup(e->dst), dep, dep_arr);
+    dep_map_add(deps_map, strdup(e->dst), dep, dup_dep, dep_arr);
     str_map_add(positions_map, strdup(e->dst));
   }
 
   // Moving outputs to the end
   StrMap* outputs_map = make_str_map("outputs expanded");
-  if(nb_duplications == -1){
+  if(nb_duplications <= 1){
     for (StrMapElem* e = out->head; e != NULL; e = e->next) {
       int len = strlen(e->key) + 1 + 3; // +1 for '\0' and +3 for share number
       for (int i = 0; i < shares; i++) {
@@ -891,7 +991,8 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     if (!weights[i]) weights[i] = 1;
   }
 
-  c->length          = deps->length - out->next_val * shares;
+  c->length          = deps->length - out->next_val * shares * nb_duplications;
+  c->nb_duplications = nb_duplications;
   c->deps            = deps;
   c->secret_count    = in->next_val;
   c->output_count    = out->next_val;
@@ -912,6 +1013,8 @@ Circuit* gen_circuit(int shares, EqList* eqs,
 
   print_circuit(c);
 
+  get_eq_expr_inter(eqs, "temp204");
+  printf("\n");
 
   free_str_map(in);
   free_str_map(randoms);
@@ -920,6 +1023,8 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   free_str_map(positions_map);
   free_dep_map(deps_map);
   free_eq_list(eqs);
+
+  //exit(EXIT_FAILURE);
 
   return c;
 }

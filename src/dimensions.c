@@ -812,14 +812,14 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
   new_deps->contained_secrets = malloc(deps->length * sizeof(*new_deps->contained_secrets));
   new_deps->bit_deps       = malloc(deps->length * sizeof(*new_deps->bit_deps));
 
-  new_deps->mult_deps      = malloc(sizeof(*new_deps->mult_deps));
-  new_deps->mult_deps->length = 0;
-  new_deps->mult_deps->deps = malloc(deps->mult_deps->length * sizeof(*new_deps->mult_deps->deps));
+  new_deps->mult_deps      = deps->mult_deps;
+  //new_deps->mult_deps->length = 0;
+  //new_deps->mult_deps->deps = malloc(deps->mult_deps->length * sizeof(*new_deps->mult_deps->deps));
 
   for (int i = 0; i < deps->length; i++) {
     Dependency* dep = deps->deps[i]->content[0];
     if (deps->deps[i]->length == 1 && is_elementary(circuit, dep)) {
-      printf("%s is elementary\n", deps->names[i]);
+      //printf("%s is elementary\n", deps->names[i]);
       add_to_elem_array(circuit, i, data_ret->elementary_wires);
       VarVector_push(data_ret->removed_wires, i);
       continue;
@@ -833,10 +833,10 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
     new_deps->bit_deps[new_deps->length]   = deps->bit_deps[i];
     new_deps->length++;
 
-    if(_is_mult(circuit, dep)){
+    /*if(_is_mult(circuit, dep)){
       new_deps->mult_deps->deps[new_deps->mult_deps->length] = deps->mult_deps->deps[get_mult_idx(circuit, dep)];
       new_deps->mult_deps->length++;
-    }
+    }*/
   }
 
   circuit->deps = new_deps;
