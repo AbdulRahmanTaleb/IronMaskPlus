@@ -13,3 +13,12 @@ v =  (  (  (  (  ( a1_1  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b1_1 
 
 print(v)
 
+
+v1 = (  (  ( r0  +  ( r1  +  (  ( a1_1  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b0_1  + _sage_const_1   )  + _sage_const_1   )  )  )  *  ( r0  +  ( r1  +  (  ( a1_0  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b0_0  + _sage_const_1   )  + _sage_const_1   )  )  )  + _sage_const_1   )  *  (  ( r0  +  ( r1  +  (  ( a1_2  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b0_2  + _sage_const_1   )  + _sage_const_1   )  )  )  *  (  (  ( r0  +  ( r1  +  (  ( a1_1  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b0_1  + _sage_const_1   )  + _sage_const_1   )  )  )  + _sage_const_1   )  *  (  ( r0  +  ( r1  +  (  ( a1_0  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b0_0  + _sage_const_1   )  + _sage_const_1   )  )  )  + _sage_const_1   )  + _sage_const_1   )  + _sage_const_1   )  + _sage_const_1   )
+
+v2 = (  (  (  ( a1_1  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b1_1  + _sage_const_1   )  + _sage_const_1   )  *  (  ( a1_0  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b1_0  + _sage_const_1   )  + _sage_const_1   )  + _sage_const_1   )  *  (  (  ( a1_2  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b1_2  + _sage_const_1   )  + _sage_const_1   )  *  (  (  (  ( a1_1  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b1_1  + _sage_const_1   )  + _sage_const_1   )  + _sage_const_1   )  *  (  (  ( a1_0  + _sage_const_1   )  + _sage_const_1   )  *  (  ( b1_0  + _sage_const_1   )  + _sage_const_1   )  + _sage_const_1   )  + _sage_const_1   )  + _sage_const_1   )  + _sage_const_1   ) 
+
+print(v1)
+
+print(v2)
+

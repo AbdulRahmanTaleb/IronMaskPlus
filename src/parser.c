@@ -1061,7 +1061,11 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   print_circuit(c);
 
   get_eq_expr(eqs, "temp204");
-  printf("\n");
+  printf("\n\n");
+  get_eq_expr(eqs, "temp198");
+  printf("\n\n");
+  get_eq_expr(eqs, "temp189");
+  printf("\n\n");
 
   free_str_map(in);
   free_str_map(randoms);

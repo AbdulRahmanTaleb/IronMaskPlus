@@ -80,10 +80,10 @@ int compute_NI(Circuit* circuit, int cores, int t) {
   printf("here 1\n");*/
 
   bool has_random = true;
-  if (!circuit->has_input_rands) {
+  /*if (!circuit->has_input_rands) {
     has_random = false;
-    //remove_randoms(circuit);
-  }
+    remove_randoms(circuit);
+  }*/
 
   DimRedData* dim_red_data = remove_elementary_wires(circuit);
 

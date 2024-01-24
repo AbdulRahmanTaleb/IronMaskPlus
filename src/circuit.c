@@ -65,7 +65,7 @@ void compute_rands_usage(Circuit* c) {
         if (dep[j]) has_input_rands = true;
       }
     }
-    if (dep[1]) {
+    if ((c->secret_count>1) &&  (dep[1])) {
       cpt++;
       for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
         i2_rands[j] |= dep[j];
@@ -86,7 +86,7 @@ void compute_rands_usage(Circuit* c) {
       }
     }
     if(cpt > 1){
-      fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[i]);
+      fprintf(stderr, "compute_rands_usage(): Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[i]);
       exit(EXIT_FAILURE);
     }
   }
@@ -146,7 +146,7 @@ void compute_rands_usage(Circuit* c) {
         }
       }
       if(cpt > 1){
-        fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[i]);
+        fprintf(stderr, "compute_rands_usage(): Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[i]);
         exit(EXIT_FAILURE);
       }
     }
@@ -178,7 +178,7 @@ void _update_contained_secrets(Dependency** contained_secrets, int idx, Dependen
     if (dep[non_mult_deps_count+i]) {
 
       if(mult){
-        fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
+        fprintf(stderr, "_update_contained_secrets(): Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
         exit(EXIT_FAILURE);
       }
 
@@ -188,7 +188,7 @@ void _update_contained_secrets(Dependency** contained_secrets, int idx, Dependen
         mult = true;
 
         if(inps){
-          fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
+          fprintf(stderr, "_update_contained_secrets(): Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
           exit(EXIT_FAILURE);
         }
 
@@ -198,7 +198,7 @@ void _update_contained_secrets(Dependency** contained_secrets, int idx, Dependen
         Dependency * contained_secrets_right = contained_secrets[temporary_mult_idx[i][1]];
 
         if((!contained_secrets_left) || (!contained_secrets_right)){
-          fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
+          fprintf(stderr, "_update_contained_secrets(): Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
           exit(EXIT_FAILURE);
         }
 
