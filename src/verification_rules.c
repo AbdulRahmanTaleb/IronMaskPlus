@@ -1194,7 +1194,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
         // factorization is required, nor any Gaussian elimination on
         // input randoms.
         Dependency secret_share_0 = 0, secret_share_1 = 0;
-        uint64_t all_mults[8] = { 0 };
+        uint64_t all_mults[BITMULT_MAX_LEN] = { 0 };
         for (int i = 0; i < local_deps_len; i++) {
           if (! gauss_rands[i].is_set) {
             secret_share_0 |= local_deps[i]->secrets[0];
@@ -1210,7 +1210,8 @@ int _verify_tuples(const Circuit* circuit, // The circuit
             int mult_idx_in_elem = __builtin_ia32_lzcnt_u64(mult_elem);
             mult_elem &= ~(1ULL << (63-mult_idx_in_elem));
             int mult_idx = i * 64 + (63-mult_idx_in_elem);
-            Dependency* this_secret_shares = dim_red_data->old_circuit->deps->mult_deps->deps[mult_idx]->contained_secrets;
+            //printf("--- %d\n\n", mult_idx);
+            Dependency* this_secret_shares = deps->mult_deps->deps[mult_idx]->contained_secrets; //dim_red_data->old_circuit->deps->mult_deps->deps[mult_idx]->contained_secrets;
             secret_share_0 |= this_secret_shares[0];
             secret_share_1 |= this_secret_shares[1];
           }

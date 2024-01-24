@@ -191,7 +191,7 @@ void _update_contained_secrets(Dependency** contained_secrets, int idx, Dependen
           fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
           exit(EXIT_FAILURE);
         }
-        
+
         mult_dep->contained_secrets = calloc(secret_count, sizeof(*mult_dep->contained_secrets));
 
         Dependency * contained_secrets_left = contained_secrets[temporary_mult_idx[i][0]];
