@@ -29,15 +29,11 @@ typedef struct _bitDep {
 
 
 typedef struct _multDep {
-  /* |left_idx| and |right_idx| provide indices in the main
-      dependencies, while |left_ptr| and |right_ptr| provide pointers
-      into the main dependencies. The latter are faster (one less
-      indirection required), but the former are useful in some cases
-      (copying the dependencies for instance). */
-  /* |left_idx| and |right_idx| are deprecated. Use |left_ptr| and
-      |right_ptr| instead */
-  int left_idx;
-  int right_idx;
+  /* |left_ptr| and |right_ptr| provide pointers
+      into the main dependencies. */
+  char * name;
+  char * name_left;
+  char * name_right;
   Dependency* left_ptr;
   Dependency* right_ptr;
   struct _BitDepVector_vector* bits_left;
@@ -106,8 +102,8 @@ typedef struct _circuit {
 
 void compute_total_wires(Circuit* c);
 void compute_rands_usage(Circuit* c);
-void compute_contained_secrets(Circuit* c);
-void compute_bit_deps(Circuit* circuit);
+void compute_contained_secrets(Circuit* c, int ** temporary_mult_idx);
+void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx);
 void print_circuit(const Circuit* c);
 
 void print_circuit_after_dim_red(const Circuit* c, const Circuit* c_old);

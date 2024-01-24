@@ -27,8 +27,6 @@
 #include "vectors.h"
 
 typedef struct _dim_red_data {
-  int length; // Length of the |elementary_wires| array
-  VarVector** elementary_wires;
   int* new_to_old_mapping;
   VarVector* removed_wires;
   Circuit* old_circuit;

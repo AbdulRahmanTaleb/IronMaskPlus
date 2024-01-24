@@ -159,26 +159,57 @@ void compute_rands_usage(Circuit* c) {
 }
 
 
-void _update_contained_secrets(Dependency* contained_secrets, DependencyList* deps,
+void _update_contained_secrets(Dependency** contained_secrets, int idx, DependencyList* deps,
                                int secret_count, int non_mult_deps_count,
-                               Dependency* dep) {
+                               Dependency* dep, int ** temporary_mult_idx) {
+  
+  bool inps = false;
   // Direct dependencies on secrets
   for (int i = 0; i < secret_count; i++) {
-    contained_secrets[i] |= dep[i];
+    contained_secrets[idx][i] |= dep[i];
+    if(dep[i]){
+      inps = true;
+    }
   }
 
   // Following multiplications
+  bool mult = false;
   for (int i = 0; i < deps->mult_deps->length; i++) {
     if (dep[non_mult_deps_count+i]) {
-      MultDependency* mult_dep = deps->mult_deps->deps[i];
-      mult_dep->contained_secrets = calloc(secret_count, sizeof(*mult_dep->contained_secrets));
-      for (int j = 0; j < secret_count; j++) {
-        mult_dep->contained_secrets[j] |= mult_dep->left_ptr[j] | mult_dep->right_ptr[j];
+
+      if(mult){
+        fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
+        exit(EXIT_FAILURE);
       }
-      _update_contained_secrets(contained_secrets, deps, secret_count, non_mult_deps_count,
-                                mult_dep->left_ptr);
-      _update_contained_secrets(contained_secrets, deps, secret_count, non_mult_deps_count,
-                                mult_dep->right_ptr);
+
+      MultDependency* mult_dep = deps->mult_deps->deps[i];
+
+      if(!(mult_dep->contained_secrets)){
+        mult = true;
+
+        if(inps){
+          fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
+          exit(EXIT_FAILURE);
+        }
+        
+        mult_dep->contained_secrets = calloc(secret_count, sizeof(*mult_dep->contained_secrets));
+
+        Dependency * contained_secrets_left = contained_secrets[temporary_mult_idx[i][0]];
+        Dependency * contained_secrets_right = contained_secrets[temporary_mult_idx[i][1]];
+
+        if((!contained_secrets_left) || (!contained_secrets_right)){
+          fprintf(stderr, "Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[idx]);
+          exit(EXIT_FAILURE);
+        }
+
+        for (int k = 0; k < secret_count; k++) {
+          mult_dep->contained_secrets[k] |= contained_secrets_left[k] | contained_secrets_right[k];
+        }
+      }
+
+      for (int k = 0; k < secret_count; k++) {
+        contained_secrets[idx][k] |= mult_dep->contained_secrets[k];
+      }
     }
   }
 }
@@ -186,7 +217,7 @@ void _update_contained_secrets(Dependency* contained_secrets, DependencyList* de
 
 // Computes |c->deps->contained_secrets|, ie, which secret shares are
 // in each variable.
-void compute_contained_secrets(Circuit* c) {
+void compute_contained_secrets(Circuit* c, int ** temporary_mult_idx) {
   int non_mult_deps_count = c->deps->deps_size - c->deps->mult_deps->length - 1;
 
   Dependency** contained_secrets = malloc(c->deps->length * sizeof(*contained_secrets));
@@ -199,8 +230,8 @@ void compute_contained_secrets(Circuit* c) {
     contained_secrets[i] = calloc(2, sizeof(**contained_secrets));
     DepArrVector* dep_arr = c->deps->deps[i];
     for (int dep_idx = 0; dep_idx < dep_arr->length; dep_idx++) {
-      _update_contained_secrets(contained_secrets[i], c->deps, c->secret_count,
-                                non_mult_deps_count, dep_arr->content[dep_idx]);
+      _update_contained_secrets(contained_secrets, i, c->deps, c->secret_count,
+                                non_mult_deps_count, dep_arr->content[dep_idx], temporary_mult_idx);
     }
   }
 
@@ -209,7 +240,7 @@ void compute_contained_secrets(Circuit* c) {
 
 
 // Creates the BitDeps corresponding to the DependencyList in |circuit|.
-void compute_bit_deps(Circuit* circuit) {
+void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
   DependencyList* deps = circuit->deps;
   BitDepVector** bit_deps = malloc(deps->length * sizeof(*bit_deps));
 
@@ -278,8 +309,10 @@ void compute_bit_deps(Circuit* circuit) {
   // Setting the bits_left and bits_right fields of mult_deps.
   for (int i = 0; i < deps->mult_deps->length; i++) {
     MultDependency* mult_dep = deps->mult_deps->deps[i];
-    mult_dep->bits_left  = bit_deps[mult_dep->left_idx];
-    mult_dep->bits_right = bit_deps[mult_dep->right_idx];
+    int * tmp_mult_ops_idx = temporary_mult_idx[i];
+
+    mult_dep->bits_left  = bit_deps[tmp_mult_ops_idx[0]];
+    mult_dep->bits_right = bit_deps[tmp_mult_ops_idx[1]];
   }
 
   circuit->deps->bit_deps = bit_deps;
@@ -351,11 +384,10 @@ void print_circuit(const Circuit* c) {
   if (c->contains_mults) {
     printf("\nMultiplications:\n");
     for (int i = 0; i < mult_deps->length; i++) {
-      int left_idx  = mult_deps->deps[i]->left_idx;
-      int right_idx = mult_deps->deps[i]->right_idx;
-      printf("%2d: %2d * %2d   [%s * %s]\n", i,
-             left_idx, right_idx,
-             deps->names[left_idx], deps->names[right_idx]);
+      printf("%d - %s: %s * %s, [%d %d]\n", i,
+             mult_deps->deps[i]->name,
+             mult_deps->deps[i]->name_left, mult_deps->deps[i]->name_right,
+             mult_deps->deps[i]->contained_secrets[0], mult_deps->deps[i]->contained_secrets[1]);
     }
 
     int non_mult_deps_count = deps_size - mult_deps->length - 1;
@@ -376,73 +408,6 @@ void print_circuit(const Circuit* c) {
   }
 
 }
-
-
-void print_circuit_after_dim_red(const Circuit* c, const Circuit* c_old){
-  DependencyList* deps = c->deps;
-  int deps_size = deps->deps_size;
-  MultDependencyList* mult_deps = deps->mult_deps;
-
-  DependencyList * deps_old = c_old->deps;
-
-  printf("Circuit with %d variables\n", c->length);
-  printf("total_wires = %d\n", c->total_wires);
-  printf("secret_count = %d\n", c->secret_count);
-  printf("output_count = %d\n", c->output_count);
-  printf("random_count = %d\n", c->random_count);
-  printf("share_count = %d\n", c->share_count);
-  printf("all_shares_mask = %d\n", c->all_shares_mask);
-  printf("contains_mults = %d\n", c->contains_mults);
-  printf("has_input_rands = %d\n", c->has_input_rands);
-  printf("mult_count = %d\n", c->deps->mult_deps->length);
-  
-
-  printf("Dependencies:\n");
-  for (int i = 0; i < deps->length; i++) {
-    printf("%3d: {", i);
-    for (int j = 0; j < deps->deps[i]->length; j++) {
-      printf(j == 0 ? " [ " : "       [ ");
-      for (int k = 0; k < deps_size; k++) {
-        printf("%d ", deps->deps[i]->content[j][k]);
-      }
-      printf(j == deps->deps[i]->length-1 ? "] " : "]\n");
-    }
-
-      for (int k = 0; k < c->secret_count; k++) {
-        printf("%d ", deps->contained_secrets[i][k]);
-      }
-
-    printf(" }  [%s] %d %d\n", deps->names[i], c->weights[i], c->deps->deps[i]->length);
-  }
-
-  if (c->contains_mults) {
-    printf("\nMultiplications (using indices and names from old circuit):\n");
-    for (int i = 0; i < mult_deps->length; i++) {
-      int left_idx  = mult_deps->deps[i]->left_idx;
-      int right_idx = mult_deps->deps[i]->right_idx;
-      printf("%2d: %2d * %2d   [%s * %s]\n", i,
-             left_idx, right_idx,
-             deps_old->names[left_idx], deps_old->names[right_idx]);
-    }
-
-    int non_mult_deps_count = c->secret_count+c->random_count;
-    int refresh_i1 = 0, refresh_i2 = 0, refresh_out = 0;
-    for (int i = deps->first_rand_idx; i < non_mult_deps_count; i++) {
-      refresh_i1 += c->i1_rands[i];
-      refresh_i2 += c->i2_rands[i];
-      refresh_out += c->out_rands[i];
-    }
-
-    printf("\nRandoms:\n");
-    for(int i=deps->first_rand_idx; i<non_mult_deps_count; i++){
-      printf("%d, %d, %d\n", c->i1_rands[i], c->i2_rands[i], c->out_rands[i]);
-    }
-
-    printf("\nRefreshes: %d on input 1, %d on input 2, %d on output.\n\n",
-           refresh_i1, refresh_i2, refresh_out);
-  }
-}
-
 
 void free_circuit(Circuit* c) {
   for (int i = 0; i < c->deps->mult_deps->length; i++) {

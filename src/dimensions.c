@@ -653,43 +653,6 @@ void advanced_dimension_reduction(Circuit* circuit) {
 //
 //
 
-
-// Returns 1 if something was added into |elementary_wires| and 0
-// otherwise.
-int add_to_elem_array_nomult(Circuit* circuit, Var dep_idx,
-                             VarVector** elementary_wires) {
-  Dependency* dep = circuit->deps->deps[dep_idx]->content[0];
-  for (int i = 0; i < circuit->secret_count; i++) {
-    if (dep[i]) {
-      int share_idx = __builtin_ffs(dep[i]) - 1;
-      int input_idx = i * circuit->share_count + share_idx;
-      VarVector_push(elementary_wires[input_idx], dep_idx);
-      return 1;
-    }
-  }
-  return 0;
-}
-
-void add_to_elem_array(Circuit* circuit, Var dep_idx,
-                       VarVector** elementary_wires) {
-  DependencyList* deps    = circuit->deps;
-  Dependency* dep         = deps->deps[dep_idx]->content[0];
-  int deps_size           = deps->deps_size;
-  int non_mult_deps_count = deps_size - deps->mult_deps->length - 1;
-
-  if (add_to_elem_array_nomult(circuit, dep_idx, elementary_wires)) return;
-
-  //assert(!circuit->has_input_rands);
-
-  for (int i = non_mult_deps_count; i < deps_size-1; i++) {
-    if (dep[i]) {
-      MultDependency* mult_dep = deps->mult_deps->deps[i-non_mult_deps_count];
-      add_to_elem_array_nomult(circuit, mult_dep->left_idx, elementary_wires);
-      add_to_elem_array_nomult(circuit, mult_dep->right_idx, elementary_wires);
-    }
-  }
-}
-
 bool _is_mult(Circuit * circuit, Dependency * dep){
   bool is_mult = true;
   for(int i=0; i<circuit->random_count + circuit->secret_count; i++){
@@ -749,8 +712,6 @@ bool is_elementary(Circuit* circuit, Dependency* dep) {
   int has_input_rands     = circuit->has_input_rands;
   int non_mult_deps_count = deps_size - deps->mult_deps->length - 1;
 
-  int last_idx = has_input_rands ? deps_size : non_mult_deps_count;
-
   // make sure it does not contain any random values
   for (int i = first_rand_idx; i < non_mult_deps_count; i++) {
     if (dep[i]) return 0;
@@ -787,12 +748,6 @@ bool is_elementary(Circuit* circuit, Dependency* dep) {
 // obtain actual failures.
 DimRedData* remove_elementary_wires(Circuit* circuit) {
   DimRedData* data_ret = malloc(sizeof(*data_ret));
-  data_ret->length = circuit->secret_count * circuit->share_count;
-  data_ret->elementary_wires = malloc(circuit->secret_count * circuit->share_count *
-                                      sizeof(*data_ret->elementary_wires));
-  for (int i = 0; i < circuit->secret_count * circuit->share_count; i++) {
-    data_ret->elementary_wires[i] = VarVector_make();
-  }
 
   data_ret->removed_wires = VarVector_make();
 
@@ -813,14 +768,11 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
   new_deps->bit_deps       = malloc(deps->length * sizeof(*new_deps->bit_deps));
 
   new_deps->mult_deps      = deps->mult_deps;
-  //new_deps->mult_deps->length = 0;
-  //new_deps->mult_deps->deps = malloc(deps->mult_deps->length * sizeof(*new_deps->mult_deps->deps));
 
   for (int i = 0; i < deps->length; i++) {
     Dependency* dep = deps->deps[i]->content[0];
     if (deps->deps[i]->length == 1 && is_elementary(circuit, dep)) {
       //printf("%s is elementary\n", deps->names[i]);
-      add_to_elem_array(circuit, i, data_ret->elementary_wires);
       VarVector_push(data_ret->removed_wires, i);
       continue;
     }
@@ -832,11 +784,6 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
     new_deps->contained_secrets[new_deps->length] = deps->contained_secrets[i];
     new_deps->bit_deps[new_deps->length]   = deps->bit_deps[i];
     new_deps->length++;
-
-    /*if(_is_mult(circuit, dep)){
-      new_deps->mult_deps->deps[new_deps->mult_deps->length] = deps->mult_deps->deps[get_mult_idx(circuit, dep)];
-      new_deps->mult_deps->length++;
-    }*/
   }
 
   circuit->deps = new_deps;
@@ -845,13 +792,13 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
   printf("Dimension reduction: old circuit: %d vars -- new circuit: %d vars.\n\n",
          deps->length, new_deps->length);
 
-  printf("Removed variables : {");
+  printf("Removed %d variables : {", data_ret->removed_wires->length);
   for(int i=0; i<data_ret->removed_wires->length; i++){
     int idx = data_ret->removed_wires->content[i];
 
     printf("%s ", data_ret->old_circuit->deps->names[idx]);
   }
-  printf("}\n");
+  printf("}\n\n");
 
   return data_ret;
 }
@@ -928,10 +875,6 @@ void remove_randoms(Circuit* circuit) {
 
 
 void free_dim_red_data(DimRedData* dim_red_data) {
-  for (int i = 0; i < dim_red_data->length; i++) {
-    VarVector_free(dim_red_data->elementary_wires[i]);
-  }
-  free(dim_red_data->elementary_wires);
   free(dim_red_data->new_to_old_mapping);
   VarVector_free(dim_red_data->removed_wires);
   free(dim_red_data);

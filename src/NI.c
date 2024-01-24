@@ -65,7 +65,8 @@ int compute_NI_constr(Circuit* circuit, int t) {
 int compute_NI(Circuit* circuit, int cores, int t) {
   //Var* unused;
   //refine_circuit(circuit, &unused);
-  if (! circuit->contains_mults) {
+
+  /*if (! circuit->contains_mults) {
     advanced_dimension_reduction(circuit);
     return compute_NI_constr(circuit, t);
   }
@@ -76,15 +77,17 @@ int compute_NI(Circuit* circuit, int cores, int t) {
 
   advanced_dimension_reduction(circuit);
 
-  printf("here 1\n");
+  printf("here 1\n");*/
 
   bool has_random = true;
   if (!circuit->has_input_rands) {
     has_random = false;
-    remove_randoms(circuit);
+    //remove_randoms(circuit);
   }
 
-  //print_circuit_after_dim_red(circuit, dim_red_data->old_circuit);
+  DimRedData* dim_red_data = remove_elementary_wires(circuit);
+
+  //print_circuit(circuit);
 
   printf("here\n");
 

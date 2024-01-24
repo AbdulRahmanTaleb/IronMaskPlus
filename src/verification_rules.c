@@ -173,7 +173,9 @@ int expand_tuple_to_failure(const Circuit* c,
   const DependencyList* deps = old_circuit->deps;
   int failure_count = 0;
 
+  //printf("1\n");
   int max_elementary = removed_wires->length;
+  //printf("2\n");
   int elem_add_max_len = min(max_len - comb_len,max_elementary);
   int elem_add_min_len = 1 + t_in - hamming_weight(secret_deps[0]);
   if (c->secret_count == 2) {
@@ -991,7 +993,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
   const uint64_t* bit_i1_rands  = circuit->bit_i1_rands;
   const uint64_t* bit_i2_rands  = circuit->bit_i2_rands;
 
-  // Since elementary probes have removed, a tuple can be a failure
+  // Since elementary probes have been removed, a tuple can be a failure
   // without containing more than |t_in| secret shares: it suffices
   // that it contains |t_in-comb_free_space| secret shares, since the
   // missing secret shares can be taken from elementary probes.
@@ -1024,6 +1026,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
   int deps1_length = 0, deps2_length = 0;
   GaussRand deps1_rands[deps12_max_length];
   GaussRand deps2_rands[deps12_max_length];
+  
   // Used when factorizing multiplications
   BitDep* deps1_fact[deps12_max_length];
   BitDep* deps2_fact[deps12_max_length];
@@ -1186,6 +1189,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
       leaky_inputs[0] = leaky_inputs[1] = 0;
 
       if (!circuit->has_input_rands) {
+        printf("HEREEEEEEEE\n");
         // Special case for multiplications without input randoms: no
         // factorization is required, nor any Gaussian elimination on
         // input randoms.
@@ -1231,7 +1235,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
         }
       }
 
-      printf("HERE\n");
+      //printf("HERE\n");
 
       // 2- Split in 2 tuples based on circuit->i1_rands and circuit->i2_rands
       int first_invalid_mult_index_in_local_deps =
@@ -1286,6 +1290,8 @@ int _verify_tuples(const Circuit* circuit, // The circuit
       if (!is_failure) goto process_success;
 
       // Tuple is a failure -> trying to factorize in order to refine that
+
+      printf("FACTORIZATION \n");
 
       int first_invalid_mult_index_in_local_deps_fact =
         tuple_to_local_deps_map[first_invalid_mult_index_fact];
@@ -1663,7 +1669,7 @@ int find_first_failure(const Circuit* circuit, // The circuit
                                  max_len, dim_red_data, has_random, first_tuple,
                                  -1, // tuple_count
                                  include_outputs, shares_to_ignore, PINI,
-                                 false, // stop at first failure
+                                 true, // stop at first failure
                                  false, // only_one_tuple
                                  incompr_tuples, failure_callback, data);
 }

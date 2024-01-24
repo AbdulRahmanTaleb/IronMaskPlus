@@ -651,7 +651,6 @@ char* dep_get_from_expr_nofail(DependencyList* deps, int length, Dependency* dep
   if(dep_arr->length > 1){
     return NULL;
   }
-
   for(int i=0; i<length; i++){
     if(deps->deps[i]->length == 1){
       bool eq = true;
@@ -701,6 +700,21 @@ void free_dep_map(DepMap* map) {
 /*                 Circuit building                      */
 /* ***************************************************** */
 
+bool vec_contains_dep(DepArrVector* dep_vec, Dependency * dep, int size){
+
+  for(int i=0; i<dep_vec->length; i++){
+    bool eq = true;
+    for(int j=0; j<size-1; j++){
+      eq = eq && (dep[j] == dep_vec->content[i][j]);
+    }
+
+    if(eq){
+      return true;
+    }
+  }
+
+  return false;
+}
 
 int count_mults(EqList* eqs) {
   int total = 0;
@@ -718,6 +732,14 @@ bool is_dep_constant(Dependency * dep, int length){
   return is_constant;
 }
 
+bool are_dep_equal(Dependency * dep1, Dependency * dep2, int deps_size){
+  bool eq = true;
+  for(int i=0; i< deps_size; i++){
+    eq = eq && (dep1[i] == dep2[i]);
+  }
+  return eq;
+}
+
 
 Circuit* gen_circuit(int shares, EqList* eqs,
                      StrMap* in, StrMap* randoms, StrMap* out,
@@ -732,6 +754,8 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   MultDependencyList* mult_deps = malloc(sizeof(*mult_deps));
   mult_deps->length = mult_count;
   mult_deps->deps = malloc(mult_count * sizeof(*(mult_deps->deps)));
+
+  int ** temporary_mult_idx = malloc(mult_count * sizeof(*temporary_mult_idx));
 
   DependencyList* deps = malloc(sizeof(*deps));
   deps->length         = circuit_size + randoms->next_val +
@@ -792,16 +816,20 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     for (StrMapElem* e = in->head; e != NULL; e = e->next, dep_bit_idx++) {
       int len = strlen(e->key) + 1 + 2 + 1 + 2; // +1 for '\0' and +2 for share number and +1 for "_" and +2 for dup number
       for (int i = 0; i < shares; i++) {
+        Dependency* dep = calloc(deps_size, sizeof(*dep));
+        dep[dep_bit_idx] = 1 << i;
+        DepArrVector* dep_arr = DepArrVector_make();
+        DepArrVector_push(dep_arr, dep);
+
         for(int j=0; j< nb_duplications; j++){
+
           char* name = malloc(len * sizeof(*name));
           snprintf(name, len, "%s%d_%d", e->key, i, j);
-          Dependency* dep = calloc(deps_size, sizeof(*dep));
-          dep[dep_bit_idx] = 1 << i;
-          DepArrVector* dep_arr = DepArrVector_make();
-          DepArrVector_push(dep_arr, dep);
+          
           deps->deps[add_idx]       = dep_arr;
           deps->deps_exprs[add_idx] = dep;
           deps->names[add_idx]      = strdup(name);
+
           dep_map_add(deps_map, name, dep, 1 << j, dep_arr);
           str_map_add(positions_map, strdup(name));
           add_idx += 1;
@@ -851,15 +879,25 @@ Circuit* gen_circuit(int shares, EqList* eqs,
       MultDependency* mult_dep = malloc(sizeof(*mult_dep));
       mult_dep->left_ptr  = left->std_dep;
       mult_dep->right_ptr = right->std_dep;
-      mult_dep->left_idx  = str_map_get(positions_map, e->expr->left);
-      mult_dep->right_idx = str_map_get(positions_map, e->expr->right);
+      mult_dep->name = strdup(e->dst);
+      mult_dep->name_left = strdup(e->expr->left);
+      mult_dep->name_right = strdup(e->expr->right);
+      mult_dep->contained_secrets = NULL;
+
       mult_deps->deps[mult_idx] = mult_dep;
 
       dep = calloc(deps_size, sizeof(*dep));
       dep[linear_deps_size + mult_idx] = 1;
+
+      temporary_mult_idx[mult_idx] = malloc(2 * sizeof(*temporary_mult_idx[mult_idx]));
+      temporary_mult_idx[mult_idx][0] = str_map_get(positions_map, e->expr->left);
+      temporary_mult_idx[mult_idx][1] = str_map_get(positions_map, e->expr->right);
+
       mult_idx++;
 
       dup_dep = left->dup_dep | right->dup_dep;
+
+
     }
 
     // Taking glitches and transitions into account. We ignore the
@@ -868,17 +906,21 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     // considered.
 
     bool dup_glitch = false;
-    if(__builtin_popcount(dup_dep) > 1){
-      printf("%s, ", e->dst, dup_dep);
-      dup_glitch = true;
-    }
+    /*if(__builtin_popcount(dup_dep) > 1){
+      if(e->expr->op == Mult){
+        if(!are_dep_equal(left->std_dep, right->std_dep, deps_size)){
+          printf("%s, ", e->dst, dup_dep);
+          dup_glitch = true;
+        }
+      }
+    }*/
 
     DepArrVector* dep_arr = DepArrVector_make();
     if ((!glitch || e->anti_glitch) && (!dup_glitch)) {
       DepArrVector_push(dep_arr, dep);
     } else {
       for (int i = 0; i < left->glitch_trans_dep->length; i++) {
-        if (!DepArrVector_contains(dep_arr, left->glitch_trans_dep->content[i])) {
+        if (!vec_contains_dep(dep_arr, left->glitch_trans_dep->content[i], deps_size)) {
           DepArrVector_push(dep_arr, left->glitch_trans_dep->content[i]);
         }
       }
@@ -886,7 +928,7 @@ Circuit* gen_circuit(int shares, EqList* eqs,
         for (int i = 0; i < right->glitch_trans_dep->length; i++) {
           // Avoiding duplicates, which might occur if a dependency is
           // in both operands.
-          if (!DepArrVector_contains(dep_arr, right->glitch_trans_dep->content[i])) {
+          if (!vec_contains_dep(dep_arr, right->glitch_trans_dep->content[i], deps_size)) {
             DepArrVector_push(dep_arr, right->glitch_trans_dep->content[i]);
           }
         }
@@ -1007,13 +1049,18 @@ Circuit* gen_circuit(int shares, EqList* eqs,
 
   compute_total_wires(c);
   compute_rands_usage(c);
-  compute_contained_secrets(c);
-  compute_bit_deps(c);
+  compute_contained_secrets(c, temporary_mult_idx);
+  compute_bit_deps(c, temporary_mult_idx);
+
+  for(int i=0; i<mult_count; i++){
+    free(temporary_mult_idx[i]);
+  }
+  free(temporary_mult_idx);
 
 
   print_circuit(c);
 
-  get_eq_expr_inter(eqs, "temp204");
+  get_eq_expr(eqs, "temp204");
   printf("\n");
 
   free_str_map(in);
