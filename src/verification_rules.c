@@ -545,6 +545,10 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
 
   // Inputs
   for (int i = 0; i < 2; i++) {
+    if ((left[i]!=0) && (right[i]!=0)){
+      fprintf(stderr, "factorize_inner_mults(): Unsupported format for variable '%s' in a multiplication gadget.\n", mult->name);
+      exit(EXIT_FAILURE);
+    }
     for (int j = 0; j < share_count; j++) {
       if (left[i] & (1ULL << j)) {
         for (int k = 0; k < secret_count; k++) {
@@ -557,6 +561,9 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
             factorized_deps[i*share_count+j]->randoms[k/64] ^= 1ULL << (k%64);
           }
         }
+        if(right[c->deps->deps_size-1]){
+          factorized_deps[i*share_count+j]->constant = 1;
+        }
       } else if (right[i] & (1ULL << j)) {
         for (int k = 0; k < secret_count; k++) {
           if (left[k]) {
@@ -568,6 +575,9 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
             factorized_deps[i*share_count+j]->randoms[k/64] ^= 1ULL << (k%64);
           }
         }
+        if(left[c->deps->deps_size-1]){
+          factorized_deps[i*share_count+j]->constant = 1;
+        }
       }
     }
   }
@@ -575,6 +585,10 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
   int rand_offset = inputs_real_count - c->secret_count;
   // Randoms
   for (int i = c->secret_count; i < non_mult_deps_count; i++) {
+    if ((left[i]) && (right[i])){
+      fprintf(stderr, "factorize_inner_mults(): Unsupported format for variable '%s' in a multiplication gadget.\n", mult->name);
+      exit(EXIT_FAILURE);
+    }
     if (left[i]) {
       for (int j = 0; j < secret_count; j++) {
         if (right[j]) {
@@ -585,6 +599,9 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
         if (right[j]) {
           factorized_deps[i+rand_offset]->randoms[j/64] ^= 1ULL << (j%64);
         }
+      }
+      if(right[c->deps->deps_size-1]){
+        factorized_deps[i+rand_offset]->constant = 1;
       }
     } else if (right[i]) {
       for (int j = 0; j < secret_count; j++) {
@@ -597,8 +614,47 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
           factorized_deps[i+rand_offset]->randoms[j/64] ^= 1ULL << (j%64);
         }
       }
+      if(left[c->deps->deps_size-1]){
+        factorized_deps[i+rand_offset]->constant = 1;
+      }
     }
   }
+
+  //constant term
+  int i = c->deps->deps_size - 1;
+  int const_offset = inputs_real_count + c->random_count;
+  if (left[i]) {
+    for (int j = 0; j < secret_count; j++) {
+      if (right[j]) {
+        factorized_deps[i+const_offset]->secrets[j] ^= right[j];
+      }
+    }
+    for (int j = secret_count; j < non_mult_deps_count; j++) {
+      if (right[j]) {
+        factorized_deps[i+const_offset]->randoms[j/64] ^= 1ULL << (j%64);
+      }
+    }
+    if(right[c->deps->deps_size-1]){
+      factorized_deps[i+const_offset]->constant = 1;
+    }
+  } 
+  const_offset++;
+  if (right[i]) {
+    for (int j = 0; j < secret_count; j++) {
+      if (left[j]) {
+        factorized_deps[i+const_offset]->secrets[j] ^= left[j];
+      }
+    }
+    for (int j = secret_count; j < non_mult_deps_count; j++) {
+      if (left[j]) {
+        factorized_deps[i+const_offset]->randoms[j/64] ^= 1ULL << (j%64);
+      }
+    }
+    if(left[c->deps->deps_size-1]){
+      factorized_deps[i+const_offset]->constant = 1;
+    }
+  }
+
 }
 
 // Factorizes the dependencies in |comb|. For each element of |comb|,
@@ -622,7 +678,7 @@ void factorize_mults(const Circuit* c, BitDep** local_deps,
   const uint64_t* bit_out_rands = c->bit_out_rands;
 
   int inputs_real_count = c->secret_count * c->share_count;
-  int factorized_deps_length = inputs_real_count + c->random_count;
+  int factorized_deps_length = inputs_real_count + c->random_count + 2; // + 2 for the constant term
 
   BitDep* factorized_deps[factorized_deps_length];
   for (int i = 0; i < factorized_deps_length; i++) {

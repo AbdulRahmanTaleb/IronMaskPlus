@@ -36,6 +36,7 @@ typedef struct _multDep {
   char * name_right;
   Dependency* left_ptr;
   Dependency* right_ptr;
+  int idx_same_as;
   struct _BitDepVector_vector* bits_left;
   struct _BitDepVector_vector* bits_right;
   Dependency* contained_secrets; // Array of size secret_count containing

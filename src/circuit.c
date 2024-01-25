@@ -52,21 +52,17 @@ void compute_rands_usage(Circuit* c) {
   //
   //  - if it contains a multiplication, then this random is added to
   //    out_rands.
-  int cpt = 0;
   for (int i = 0; i < deps->length; i++) {
-    cpt=0;
 
     Dependency* dep = deps->deps_exprs[i];
 
     if (dep[0]) {
-      cpt++;
       for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
         i1_rands[j] |= dep[j];
         if (dep[j]) has_input_rands = true;
       }
     }
     if ((c->secret_count>1) &&  (dep[1])) {
-      cpt++;
       for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
         i2_rands[j] |= dep[j];
         if (dep[j]) has_input_rands = true;
@@ -78,18 +74,15 @@ void compute_rands_usage(Circuit* c) {
       // current variable is a linear combination of multiplication variables and randoms
       // and hence out_rands is updated (e.g. an output share).
       if (dep[k]) {
-        cpt++;
         for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
           out_rands[j] |= dep[j];
         }
         break;
       }
     }
-    if(cpt > 1){
-      fprintf(stderr, "compute_rands_usage(): Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[i]);
-      exit(EXIT_FAILURE);
-    }
   }
+
+
 
   // At this point, it's possible that some randoms are neither in
   // i1_rands/i2_rands nor out_rands. For instance, consider the
@@ -120,7 +113,6 @@ void compute_rands_usage(Circuit* c) {
   for (int i = 0; i < deps->length; i++) {
     Dependency* dep = deps->deps_exprs[i];
     for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
-      cpt=0;
       if (dep[j] && !i1_rands[j] && !i2_rands[j] && !out_rands[j]) {
         // The random i does not have a group yet -> searching for
         // other randoms in the dependency (one of them should have a
@@ -129,26 +121,31 @@ void compute_rands_usage(Circuit* c) {
           br = false;
           if (dep[k] && i1_rands[k]) {
             i1_rands[j] |= dep[j];
-            cpt++;
             br = true;
           } 
           if (dep[k] && i2_rands[k]) {
             i2_rands[j] |= dep[j];
-            cpt++;
             br = true;
           } 
           if (dep[k] && out_rands[k]) {
             out_rands[j] |= dep[j];
-            cpt++;
             br = true;
           }
           if(br) break;
         }
       }
-      if(cpt > 1){
-        fprintf(stderr, "compute_rands_usage(): Unsupported format for variable '%s' in a multiplication gadget.\n", deps->names[i]);
-        exit(EXIT_FAILURE);
-      }
+    }
+  }
+
+
+  for(int i=first_rand_idx; i<non_mult_deps_count; i++){
+    int cpt = 0;
+    if(i1_rands[i]) cpt++;
+    if(i2_rands[i]) cpt++;
+    if(out_rands[i]) cpt++;
+    if(cpt > 1){
+      fprintf(stderr, "compute_rands_usage(): Unsupported format for random '%d' in a multiplication gadget.\n", i- c->secret_count);
+      exit(EXIT_FAILURE);
     }
   }
 
@@ -233,6 +230,21 @@ void compute_contained_secrets(Circuit* c, int ** temporary_mult_idx) {
       _update_contained_secrets(contained_secrets, i, c->deps, c->secret_count,
                                 non_mult_deps_count, dep_arr->content[dep_idx], temporary_mult_idx);
     }
+  }
+
+  MultDependencyList * mult_deps = c->deps->mult_deps;
+  for (int i = 0; i < mult_deps->length; i++) {
+
+      MultDependency* mult_dep = mult_deps->deps[i];
+
+      if(!(mult_dep->contained_secrets)){
+        if(mult_dep->idx_same_as != -1){
+          mult_dep->contained_secrets = mult_deps->deps[mult_dep->idx_same_as]->contained_secrets;
+        }
+        else{
+          mult_dep->contained_secrets = calloc(2, sizeof(**contained_secrets));
+        }
+      }
   }
 
   c->deps->contained_secrets = contained_secrets;
@@ -411,7 +423,9 @@ void print_circuit(const Circuit* c) {
 
 void free_circuit(Circuit* c) {
   for (int i = 0; i < c->deps->mult_deps->length; i++) {
-    free(c->deps->mult_deps->deps[i]->contained_secrets);
+    if(c->deps->mult_deps->deps[i]->idx_same_as == -1){
+      free(c->deps->mult_deps->deps[i]->contained_secrets);
+    }
     free(c->deps->mult_deps->deps[i]);
   }
   free(c->deps->mult_deps->deps);

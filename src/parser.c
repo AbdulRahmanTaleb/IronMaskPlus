@@ -883,20 +883,55 @@ Circuit* gen_circuit(int shares, EqList* eqs,
       mult_dep->name_left = strdup(e->expr->left);
       mult_dep->name_right = strdup(e->expr->right);
       mult_dep->contained_secrets = NULL;
+      mult_dep->idx_same_as = -1;
 
       mult_deps->deps[mult_idx] = mult_dep;
-
-      dep = calloc(deps_size, sizeof(*dep));
-      dep[linear_deps_size + mult_idx] = 1;
 
       temporary_mult_idx[mult_idx] = malloc(2 * sizeof(*temporary_mult_idx[mult_idx]));
       temporary_mult_idx[mult_idx][0] = str_map_get(positions_map, e->expr->left);
       temporary_mult_idx[mult_idx][1] = str_map_get(positions_map, e->expr->right);
 
-      mult_idx++;
-
       dup_dep = left->dup_dep | right->dup_dep;
 
+      dep = calloc(deps_size, sizeof(*dep));
+      if(is_dep_constant(mult_dep->left_ptr, deps_size)){
+        // if the left operand is the constant term '1'
+        if(mult_dep->left_ptr[deps_size-1] != 0){
+          memcpy(dep, mult_dep->right_ptr, deps_size * sizeof(*dep));
+        }
+        else{printf("mult %s is mult by zero\n", e->dst);}
+      }
+      else if(is_dep_constant(mult_dep->right_ptr, deps_size)){
+        // if the right operand is the constant term '1'
+        if(mult_dep->right_ptr[deps_size-1] != 0){
+          memcpy(dep, mult_dep->left_ptr, deps_size * sizeof(*dep));
+        }
+        else{printf("mult %s is mult by zero\n", e->dst);}
+      }
+      else if(are_dep_equal(mult_dep->left_ptr, mult_dep->right_ptr, deps_size)){
+        printf("mult. %s has same expression on operands\n", e->dst);
+        memcpy(dep, mult_dep->left_ptr, deps_size * sizeof(*dep));
+      }
+      else{
+        int idx = -1;
+        for(int i=0; i<mult_idx; i++){
+          if((are_dep_equal(mult_dep->left_ptr, mult_deps->deps[i]->left_ptr, deps_size)) 
+            && (are_dep_equal(mult_dep->right_ptr, mult_deps->deps[i]->right_ptr, deps_size))){
+            idx = i;
+            break;
+          }
+        }
+        if(idx != -1){
+          printf("mult. %s is the same as mult %s\n", e->dst, mult_deps->deps[idx]->name);
+          dep[linear_deps_size + idx] = 1;
+          mult_dep->idx_same_as = idx;
+        }
+        else{
+          dep[linear_deps_size + mult_idx] = 1;
+        }
+      }
+      
+      mult_idx++;
 
     }
 
@@ -1060,12 +1095,12 @@ Circuit* gen_circuit(int shares, EqList* eqs,
 
   print_circuit(c);
 
-  get_eq_expr(eqs, "temp204");
-  printf("\n\n");
-  get_eq_expr(eqs, "temp198");
-  printf("\n\n");
-  get_eq_expr(eqs, "temp189");
-  printf("\n\n");
+  // get_eq_expr(eqs, "temp204");
+  // printf("\n\n");
+  // get_eq_expr(eqs, "temp198");
+  // printf("\n\n");
+  // get_eq_expr(eqs, "temp189");
+  // printf("\n\n");
 
   free_str_map(in);
   free_str_map(randoms);
