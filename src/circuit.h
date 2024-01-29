@@ -13,6 +13,7 @@ typedef DEPENDENCY_TYPE Dependency;
 #define RANDOMS_MAX_LEN 5 // Enough to store 64*5 = 320 randoms
 #define BITMULT_MAX_LEN 7 // Enough to store 64*7 = 448 = 21*21 -->
                           // multiplication gadgets up to order 21
+#define BITCORRECTION_OUTPUTS_MAX_LEN 7
 
 // The BitDep structure is a more compact representation of
 // dependencies: instead of using a array of Dependency, where most
@@ -23,6 +24,7 @@ typedef struct _bitDep {
   Dependency secrets[2];
   uint64_t randoms[RANDOMS_MAX_LEN];
   uint64_t mults[BITMULT_MAX_LEN];
+  uint64_t correction_outputs[BITCORRECTION_OUTPUTS_MAX_LEN];
   Dependency out;
   Dependency constant;
 } BitDep;

@@ -279,8 +279,12 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
   int mult_count   = deps->mult_deps->length;
   int non_mult_deps_count = random_count;
 
+  int corr_first_idx = deps->first_correction_idx;
+  int corr_outputs_count = deps->correction_outputs->length;
+
   int bit_rand_len = 1 + random_count / 64;
   int bit_mult_len = 1 + mult_count / 64;
+  int bit_correction_outputs_len = 1 + corr_outputs_count / 64;
 
   for (int i = 0; i < deps->length; i++) {
     DepArrVector* dep = deps->deps[i];
@@ -308,6 +312,15 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
           if (k*64+l >= mult_count) break;
           if (dep->content[j][non_mult_deps_count+k*64+l]) {
             bit_dep->mults[k] |= 1ULL << l;
+          }
+        }
+      }
+
+      for (int k = 0; k < bit_correction_outputs_len; k++) {
+        for (int l = 0; l < 64; l++) {
+          if (k*64+l >= corr_outputs_count) break;
+          if (dep->content[j][corr_first_idx+k*64+l]) {
+            bit_dep->correction_outputs[k] |= 1ULL << l;
           }
         }
       }
@@ -367,7 +380,7 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
           circuit->bit_i2_rands[i] |= 1ULL << j;
         } else {
           printf("Random %d (%s) is not in out_rands/i1_rands/i2_rands...\n",
-                 idx, circuit->deps->names[idx]);
+                idx, circuit->deps->names[idx]);
           assert(false);
         }
 
