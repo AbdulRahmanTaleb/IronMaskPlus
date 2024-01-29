@@ -1165,7 +1165,7 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   free_dep_map(deps_map);
   free_eq_list(eqs);
 
-  exit(EXIT_FAILURE);
+  //exit(EXIT_FAILURE);
 
 
   return c;

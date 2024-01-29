@@ -719,6 +719,12 @@ bool is_elementary(Circuit* circuit, Dependency* dep) {
     if (dep[i]) return 0;
   }
 
+  // make sure it does not contain any correction outputs
+  int start = circuit->deps->first_correction_idx;
+  for(int i=start; i< (start+circuit->deps->correction_outputs->length); i++){
+    if(dep[i]) return 0;
+  }
+
   // make sure that it contains at most 1 input share
   int input_count = 0;
   for (int i = 0; i < first_rand_idx; i++) {
