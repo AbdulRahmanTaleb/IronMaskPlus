@@ -383,7 +383,7 @@ static int is_failure_with_randoms(const Circuit* circuit,
   int random_count = circuit->random_count + secret_count;
   int deps_size = deps->deps_size;
   int mult_count = deps->mult_deps->length;
-  int non_mult_deps_count = deps_size - mult_count - 1;
+  int non_mult_deps_count = circuit->secret_count + circuit->random_count;
   int bit_rand_len = 1 + random_count / 64;
   int bit_mult_len = 1 + mult_count / 64;
 
@@ -539,14 +539,14 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
   int secret_count        = c->secret_count;
   int share_count         = c->share_count;
   int inputs_real_count   = secret_count * share_count;
-  int non_mult_deps_count = c->deps->deps_size - c->deps->mult_deps->length - 1;
+  int non_mult_deps_count = c->secret_count + c->random_count;
   Dependency* left  = mult->left_ptr;
   Dependency* right = mult->right_ptr;
 
   // Inputs
   for (int i = 0; i < 2; i++) {
     if ((left[i]!=0) && (right[i]!=0)){
-      fprintf(stderr, "factorize_inner_mults(): Unsupported format for variable '%s' in a multiplication gadget.\n", mult->name);
+      fprintf(stderr, "factorize_inner_mults(): Unsupported format for variable '%s' in a multiplication gadget. Operands contain input shares from the same input %d\n", mult->name, i);
       exit(EXIT_FAILURE);
     }
     for (int j = 0; j < share_count; j++) {
@@ -586,7 +586,7 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
   // Randoms
   for (int i = c->secret_count; i < non_mult_deps_count; i++) {
     if ((left[i]) && (right[i])){
-      fprintf(stderr, "factorize_inner_mults(): Unsupported format for variable '%s' in a multiplication gadget.\n", mult->name);
+      fprintf(stderr, "factorize_inner_mults(): Unsupported format for variable '%s' in a multiplication gadget. Operands contain same random '%d'\n", mult->name, i-c->secret_count);
       exit(EXIT_FAILURE);
     }
     if (left[i]) {
@@ -678,7 +678,7 @@ void factorize_mults(const Circuit* c, BitDep** local_deps,
   const uint64_t* bit_out_rands = c->bit_out_rands;
 
   int inputs_real_count = c->secret_count * c->share_count;
-  int factorized_deps_length = inputs_real_count + c->random_count + 2; // + 2 for the constant term
+  int factorized_deps_length = inputs_real_count + c->random_count + 2; // + 2 for the constant terms on both sides
 
   BitDep* factorized_deps[factorized_deps_length];
   for (int i = 0; i < factorized_deps_length; i++) {
@@ -717,7 +717,7 @@ void factorize_mults(const Circuit* c, BitDep** local_deps,
       // element of the tuple.
       for(int k=0; k< bit_mult_len; k++){
         if(dep->mults[k] != 0){
-          fprintf(stderr, "Unsupported variables in gadget. A variable should not contain input randoms and multiplications. Exiting...\n");
+          fprintf(stderr, "factorize_mults(): Unsupported variables in gadget. A variable should not contain input randoms and multiplications. Exiting...\n");
           exit(EXIT_FAILURE);
         }
       }
@@ -1143,7 +1143,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
 
       // Factorizing tuple
 
-      printf("FACTORIZATION \n");
+      printf("FACTORISING %s\n", circuit->deps->names[curr_comb[0]]);
 
       int first_invalid_mult_index_in_local_deps_fact =
         tuple_to_local_deps_map[first_invalid_mult_index_fact];
@@ -1912,7 +1912,7 @@ static int is_failure_with_randoms_freeSNI_IOS(const Circuit* circuit,
   int random_count = circuit->random_count + secret_count;
   int deps_size = deps->deps_size;
   int mult_count = deps->mult_deps->length;
-  int non_mult_deps_count = deps_size - mult_count - 1;
+  int non_mult_deps_count = circuit->secret_count + circuit->random_count;
   int bit_rand_len = 1 + random_count / 64;
   int bit_mult_len = 1 + mult_count / 64;
 

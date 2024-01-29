@@ -36,7 +36,6 @@ typedef struct _multDep {
   char * name_right;
   Dependency* left_ptr;
   Dependency* right_ptr;
-  int idx_same_as;
   struct _BitDepVector_vector* bits_left;
   struct _BitDepVector_vector* bits_right;
   Dependency* contained_secrets; // Array of size secret_count containing
@@ -50,6 +49,12 @@ typedef struct _multDependencyList {
   int length;
 } MultDependencyList;
 
+typedef struct _correctionOutputDependency {
+  struct _DepArrVector_vector** correction_outputs_deps;
+  char ** correction_outputs_names;
+  int length;
+} CorrectionOutputs;
+
 typedef struct _dependencyList {
   struct _DepArrVector_vector** deps;
   Dependency** deps_exprs;
@@ -59,11 +64,16 @@ typedef struct _dependencyList {
   int length; // Length of |deps|
   int first_rand_idx; // Index of first random variable in each
                       // element of |deps|
+  int first_mult_idx; // Index of first mult variable in each
+                      // element of |deps|
+  int first_correction_idx; // Index of first correction output variable in each
+                            // element of |deps|
   Dependency** contained_secrets; // Array of size |length| containing the
                                   // secret shares contained in each DepArrVector
                                   // of |deps|.
   struct _BitDepVector_vector** bit_deps; // bitvector-based representation of |deps|
   MultDependencyList* mult_deps;
+  CorrectionOutputs * correction_outputs;
 } DependencyList;
 
 

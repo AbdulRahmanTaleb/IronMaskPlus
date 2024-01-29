@@ -33,7 +33,8 @@ void compute_rands_usage(Circuit* c) {
   int first_rand_idx = deps->first_rand_idx;
   int nb_rands = c->random_count;
   int mult_count = c->deps->mult_deps->length;
-  int non_mult_deps_count = c->deps->deps_size - c->deps->mult_deps->length - 1; //because the last coefficient is for the constant term "0" or "1"
+
+  int non_mult_deps_count = c->secret_count + c->random_count;
   bool* i1_rands  = calloc(non_mult_deps_count, sizeof(*i1_rands));
   bool* i2_rands  = calloc(non_mult_deps_count, sizeof(*i2_rands));
   bool* out_rands = calloc(non_mult_deps_count, sizeof(*out_rands));
@@ -147,6 +148,10 @@ void compute_rands_usage(Circuit* c) {
       fprintf(stderr, "compute_rands_usage(): Unsupported format for random '%d' in a multiplication gadget.\n", i- c->secret_count);
       exit(EXIT_FAILURE);
     }
+    if(cpt == 0){
+      fprintf(stderr, "compute_rands_usage(): random '%d' not found in gadget.\n", i- c->secret_count);
+      exit(EXIT_FAILURE);
+    }
   }
 
   c->i1_rands        = i1_rands;
@@ -209,13 +214,26 @@ void _update_contained_secrets(Dependency** contained_secrets, int idx, Dependen
       }
     }
   }
+
+  CorrectionOutputs * correction_outputs = deps->correction_outputs;
+  int start = deps->first_correction_idx;
+  for (int i = start; i < start + correction_outputs->length; i++) {
+    if(dep[i]){
+      DepArrVector* deps_sub = correction_outputs->correction_outputs_deps[i-start];
+      printf("var = %s, len = %d\n", correction_outputs->correction_outputs_names[i-start], deps_sub->length);
+      for(int k=0; k< deps_sub->length; k++){
+        _update_contained_secrets(contained_secrets, idx, deps, secret_count,
+                                non_mult_deps_count, deps_sub->content[k], temporary_mult_idx);
+      }
+    }
+  }
 }
 
 
 // Computes |c->deps->contained_secrets|, ie, which secret shares are
 // in each variable.
 void compute_contained_secrets(Circuit* c, int ** temporary_mult_idx) {
-  int non_mult_deps_count = c->deps->deps_size - c->deps->mult_deps->length - 1;
+  int non_mult_deps_count = c->secret_count + c->random_count;
 
   Dependency** contained_secrets = malloc(c->deps->length * sizeof(*contained_secrets));
   for (int i = 0; i < c->deps->length; i++) {
@@ -232,20 +250,20 @@ void compute_contained_secrets(Circuit* c, int ** temporary_mult_idx) {
     }
   }
 
-  MultDependencyList * mult_deps = c->deps->mult_deps;
-  for (int i = 0; i < mult_deps->length; i++) {
+  // MultDependencyList * mult_deps = c->deps->mult_deps;
+  // for (int i = 0; i < mult_deps->length; i++) {
 
-      MultDependency* mult_dep = mult_deps->deps[i];
+  //     MultDependency* mult_dep = mult_deps->deps[i];
 
-      if(!(mult_dep->contained_secrets)){
-        if(mult_dep->idx_same_as != -1){
-          mult_dep->contained_secrets = mult_deps->deps[mult_dep->idx_same_as]->contained_secrets;
-        }
-        else{
-          mult_dep->contained_secrets = calloc(2, sizeof(**contained_secrets));
-        }
-      }
-  }
+  //     if(!(mult_dep->contained_secrets)){
+  //       if(mult_dep->idx_same_as != -1){
+  //         mult_dep->contained_secrets = mult_deps->deps[mult_dep->idx_same_as]->contained_secrets;
+  //       }
+  //       else{
+  //         mult_dep->contained_secrets = calloc(2, sizeof(**contained_secrets));
+  //       }
+  //     }
+  // }
 
   c->deps->contained_secrets = contained_secrets;
 }
@@ -380,9 +398,22 @@ void print_circuit(const Circuit* c) {
     printf("%3d: {", i);
     for (int j = 0; j < deps->deps[i]->length; j++) {
       printf(j == 0 ? " [ " : "       [ ");
-      for (int k = 0; k < deps_size; k++) {
+      for (int k = 0; k < c->secret_count; k++) {
         printf("%d ", deps->deps[i]->content[j][k]);
       }
+      printf(", ");
+      for (int k = c->deps->first_rand_idx; k < c->deps->first_rand_idx+c->random_count; k++) {
+        printf("%d ", deps->deps[i]->content[j][k]);
+      }
+      printf(", ");
+      for (int k = c->deps->first_mult_idx; k < c->deps->first_mult_idx+c->deps->mult_deps->length; k++) {
+        printf("%d ", deps->deps[i]->content[j][k]);
+      }
+      printf(", ");
+      for (int k = c->deps->first_correction_idx; k < c->deps->first_correction_idx+c->deps->correction_outputs->length; k++) {
+        printf("%d ", deps->deps[i]->content[j][k]);
+      }
+      printf(", %d", deps->deps[i]->content[j][c->deps->deps_size-1]);
       printf(j == deps->deps[i]->length-1 ? "] " : "]\n");
     }
 
@@ -402,7 +433,7 @@ void print_circuit(const Circuit* c) {
              mult_deps->deps[i]->contained_secrets[0], mult_deps->deps[i]->contained_secrets[1]);
     }
 
-    int non_mult_deps_count = deps_size - mult_deps->length - 1;
+    int non_mult_deps_count = c->secret_count + c->random_count;
     int refresh_i1 = 0, refresh_i2 = 0, refresh_out = 0;
     for (int i = deps->first_rand_idx; i < non_mult_deps_count; i++) {
       refresh_i1 += c->i1_rands[i];
@@ -423,9 +454,9 @@ void print_circuit(const Circuit* c) {
 
 void free_circuit(Circuit* c) {
   for (int i = 0; i < c->deps->mult_deps->length; i++) {
-    if(c->deps->mult_deps->deps[i]->idx_same_as == -1){
-      free(c->deps->mult_deps->deps[i]->contained_secrets);
-    }
+    //if(c->deps->mult_deps->deps[i]->idx_same_as == -1){
+    free(c->deps->mult_deps->deps[i]->contained_secrets);
+    //}
     free(c->deps->mult_deps->deps[i]);
   }
   free(c->deps->mult_deps->deps);

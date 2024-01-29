@@ -239,6 +239,8 @@ typedef struct _EqListElem {
   Expr* expr;
   char* dst;
   bool anti_glitch; // True if disables glitches, false otherwise
+  bool correction_output; // True if dst is the output of a correction block
+  bool correction; // True if dst is an internal variable to a correction block
   struct _EqListElem* next;
 } EqListElem;
 
@@ -254,11 +256,13 @@ EqList* make_eq_list() {
   return l;
 }
 
-void add_eq_list(EqList* l, char* dst, Expr* e, bool anti_glitch) {
+void add_eq_list(EqList* l, char* dst, Expr* e, bool anti_glitch, bool correction, bool correction_output) {
   EqListElem* el = malloc(sizeof(*el));
   el->expr = e;
   el->dst  = dst;
   el->anti_glitch = anti_glitch;
+  el->correction = correction;
+  el->correction_output = correction_output;
   el->next = l->head;
   l->head = el;
   l->size++;
@@ -300,13 +304,13 @@ EqListElem * get_eq_list(EqList* l, char* dst) {
   return NULL;
 }
 
-void get_eq_expr(EqList* l, char* dst){
+void print_eq_full_expr(EqList* l, char* dst){
   EqListElem * x = get_eq_list(l, dst);
   if(x){
     if ((x->expr->op != Asgn) && (x->expr->op != Mult))
       printf(" ( ");
 
-    get_eq_expr(l, x->expr->left);
+    print_eq_full_expr(l, x->expr->left);
 
     if(x->expr->op != Asgn){
       if(x->expr->op == Add){
@@ -315,7 +319,7 @@ void get_eq_expr(EqList* l, char* dst){
       else{
         printf(" * ");
       }
-      get_eq_expr(l, x->expr->right);
+      print_eq_full_expr(l, x->expr->right);
     }
 
     if ((x->expr->op != Asgn) && (x->expr->op != Mult))
@@ -324,34 +328,7 @@ void get_eq_expr(EqList* l, char* dst){
     return;
   }
 
-  /*if(dst[2] == '_'){
-    dst[2] = '\0';
-  }*/
   printf("%s ", dst);
-}
-
-void get_eq_expr_inter(EqList* l, char* dst){
-  EqListElem * x = get_eq_list(l, dst);
-  if(x){
-    printf("%s = %s", dst, x->expr->left);
-
-    if(x->expr->op != Asgn){
-      printf("%s %s\n", (x->expr->op == Mult) ? "*" : "+", x->expr->right);
-    }
-    else{
-      printf("\n");
-    }
-    printf("\n");
-    get_eq_expr_inter(l, x->expr->left);
-    
-    
-    if(x->expr->op != Asgn){
-      printf("\n");
-      get_eq_expr_inter(l, x->expr->right);
-    }
-    
-    return;
-  }
 }
 
 EqListElem* _reverse_eq_list(EqListElem* el, EqListElem* prev) {
@@ -454,6 +431,8 @@ Expr* parse_expr(char* line, char* str) {
 
 void parse_eq_str(EqList* eqs, char* str) {
   bool anti_glitch = false;
+  bool correction_output = false;
+  bool correction = false;
   char* str_start = str;
   // Skipping whitespaces
   while (*str && is_space(*str)) str++;
@@ -473,6 +452,7 @@ void parse_eq_str(EqList* eqs, char* str) {
   str++;
 
   skip_spaces(str);
+  char * str_tmp = str;
   if (*str == '!' && *(str+1) == '[') {
     anti_glitch = true;
     str += 2;
@@ -486,11 +466,25 @@ void parse_eq_str(EqList* eqs, char* str) {
               "Exiting.");
       exit(EXIT_FAILURE);
     }
+    str_tmp = str + idx + 1;
     str[idx] = '\0'; // truncating the end of the string
   }
 
+  while(!is_eol(*str_tmp)) str_tmp++;
+  if(*str_tmp == '#'){
+    if(str_equals_nocase(str_tmp+1, "correction_o", 12)){
+      correction_output = true;
+      correction = true;
+    }
+    else if(str_equals_nocase(str_tmp+1, "correction", 10)){
+      correction = true;
+    }
+  }
+
   Expr* e = parse_expr(str_start, str);
-  add_eq_list(eqs, dst, e, anti_glitch);
+  add_eq_list(eqs, dst, e, anti_glitch, correction, correction_output);
+
+  //if(correction_output) printf("%s is correction output\n", dst);
 }
 
 #define uppercase(c) ((c) >= 97 && (c) <= 122 ? (c) - 32 : (c))
@@ -611,11 +605,10 @@ DepMap* make_dep_map(char* name) {
 }
 
 // Warning: takes ownership of |dep|; don't free it after calling map_add!
-void dep_map_add(DepMap* map, char* str, Dependency* std_dep, Dependency dup_dep, DepArrVector* glitch_trans_dep) {
+void dep_map_add(DepMap* map, char* str, Dependency* std_dep, DepArrVector* glitch_trans_dep) {
   DepMapElem* e = malloc(sizeof(*e));
   e->key = str;
   e->std_dep = std_dep;
-  e->dup_dep = dup_dep;
   e->glitch_trans_dep = glitch_trans_dep;
   e->next = map->head;
   map->head = e;
@@ -719,7 +712,15 @@ bool vec_contains_dep(DepArrVector* dep_vec, Dependency * dep, int size){
 int count_mults(EqList* eqs) {
   int total = 0;
   for (EqListElem* e = eqs->head; e != NULL; e = e->next) {
-    if (e->expr->op == Mult) total += 1;
+    if ((e->expr->op == Mult) && (!e->correction) && (!(e->correction_output)) ) total += 1;
+  }
+  return total;
+}
+
+int count_correction_outputs(EqList* eqs) {
+  int total = 0;
+  for (EqListElem* e = eqs->head; e != NULL; e = e->next) {
+    if (e->correction_output) total += 1;
   }
   return total;
 }
@@ -747,9 +748,19 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   Circuit* c = malloc(sizeof(*c));
 
   int circuit_size = eqs->size;
+
   int mult_count = count_mults(eqs);
+  int correction_outputs_count = count_correction_outputs(eqs);
   int linear_deps_size = in->next_val + randoms->next_val;
-  int deps_size = linear_deps_size + mult_count + 1;  // the additional coefficient is for the constant term "1" or "0"
+
+  //printf("There are %d multiplications\n", mult_count);
+  //exit(EXIT_FAILURE);
+
+  int deps_size = in->next_val
+                  + randoms->next_val
+                  + mult_count
+                  + correction_outputs_count
+                  + 1;                        // for the constant term "1" or "0"
 
   MultDependencyList* mult_deps = malloc(sizeof(*mult_deps));
   mult_deps->length = mult_count;
@@ -760,20 +771,32 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   DependencyList* deps = malloc(sizeof(*deps));
   deps->length         = circuit_size + randoms->next_val +
                           in->next_val * shares * nb_duplications + 2;
-  
   deps->deps_size      = deps_size;
+
   deps->first_rand_idx = in->next_val;
+  deps->first_mult_idx = deps->first_rand_idx + randoms->next_val;
+  deps->first_correction_idx = (correction_outputs_count == 0) ? -1 : (deps->first_mult_idx + mult_count);
+
   deps->deps           = malloc(deps->length * sizeof(*deps->deps));
   deps->deps_exprs     = malloc(deps->length * sizeof(*deps->deps_exprs));
   deps->names          = malloc(deps->length * sizeof(*deps->names));
   deps->mult_deps      = mult_deps;
+
+  CorrectionOutputs * correction_outputs = malloc(sizeof(*correction_outputs));
+  correction_outputs->correction_outputs_deps = malloc(correction_outputs_count * sizeof(*correction_outputs->correction_outputs_deps));
+  correction_outputs->correction_outputs_names = malloc(correction_outputs_count * sizeof(*correction_outputs->correction_outputs_names));
+  correction_outputs->length = correction_outputs_count;
+  deps->correction_outputs = correction_outputs;
+
+  bool * faulted = malloc(deps->length * sizeof(bool));
+
    
   DepMap* deps_map = make_dep_map("Dependencies");
 
   int* weights = calloc(deps->length, sizeof(*weights));
   StrMap* positions_map = make_str_map("Positions");
 
-  int add_idx = 0, mult_idx = 0, dep_bit_idx = 0;
+  int add_idx = 0, mult_idx = 0, dep_bit_idx = 0, corr_output_idx = 0;
 
   // Initializing "0" and "1" dependencies
   for(int i=0; i<2; i++){
@@ -782,12 +805,14 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     Dependency* dep = calloc(deps_size, sizeof(*dep));
     dep[deps_size-1] = i;
     DepArrVector* dep_arr = DepArrVector_make();
-    DepArrVector_push(dep_arr, dep);
+    //DepArrVector_push(dep_arr, dep);
     deps->deps[add_idx]       = dep_arr;
     deps->deps_exprs[add_idx] = dep;
     deps->names[add_idx]      = strdup(name);
-    dep_map_add(deps_map, name, dep, 0, dep_arr);
+    dep_map_add(deps_map, name, dep, dep_arr);
     str_map_add(positions_map, strdup(name));
+
+    faulted[add_idx] = false;
 
     add_idx += 1;
   }
@@ -806,8 +831,9 @@ Circuit* gen_circuit(int shares, EqList* eqs,
         deps->deps[add_idx]       = dep_arr;
         deps->deps_exprs[add_idx] = dep;
         deps->names[add_idx]      = strdup(name);
-        dep_map_add(deps_map, name, dep, 0, dep_arr);
+        dep_map_add(deps_map, name, dep, dep_arr);
         str_map_add(positions_map, strdup(name));
+        faulted[add_idx] = false;
         add_idx += 1;
       }
     }
@@ -830,8 +856,9 @@ Circuit* gen_circuit(int shares, EqList* eqs,
           deps->deps_exprs[add_idx] = dep;
           deps->names[add_idx]      = strdup(name);
 
-          dep_map_add(deps_map, name, dep, 1 << j, dep_arr);
+          dep_map_add(deps_map, name, dep, dep_arr);
           str_map_add(positions_map, strdup(name));
+          faulted[add_idx] = false;
           add_idx += 1;
         }
       }
@@ -848,23 +875,22 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     deps->deps[add_idx]       = dep_arr;
     deps->deps_exprs[add_idx] = dep;
     deps->names[add_idx]      = strdup(e->key);
-    dep_map_add(deps_map, strdup(e->key), dep, 0, dep_arr);
+    dep_map_add(deps_map, strdup(e->key), dep, dep_arr);
     str_map_add(positions_map, strdup(e->key));
+    faulted[add_idx] = false;
   }
 
-
   // Adding dependencies of other instructions
-  for (EqListElem* e = eqs->head; e != NULL; e = e->next, add_idx++) {
+  for (EqListElem* e = eqs->head; e != NULL; e = e->next, add_idx++) {    
     Dependency* dep;
     DepMapElem* left  = dep_map_get(deps_map, e->expr->left);
     DepMapElem* right = e->expr->op != Asgn ? dep_map_get(deps_map, e->expr->right) : NULL;
-    Dependency dup_dep = 0;
 
     // Computing dependency |dep|
     // Assign operation
     if (e->expr->op == Asgn) {
       dep = left->std_dep;
-      dup_dep = left->dup_dep;
+      faulted[add_idx] = faulted[str_map_get(positions_map, e->expr->left)];
     }
     // Add operation
     else if (e->expr->op == Add) {
@@ -872,88 +898,94 @@ Circuit* gen_circuit(int shares, EqList* eqs,
       for (int i = 0; i < deps_size; i++) {
         dep[i] = left->std_dep[i] ^ right->std_dep[i];
       }
-      dup_dep = left->dup_dep | right->dup_dep;
+      faulted[add_idx] = faulted[str_map_get(positions_map, e->expr->left)] || 
+                          faulted[str_map_get(positions_map, e->expr->right)];
     } 
     // Multiplication operation
     else { 
-      MultDependency* mult_dep = malloc(sizeof(*mult_dep));
-      mult_dep->left_ptr  = left->std_dep;
-      mult_dep->right_ptr = right->std_dep;
-      mult_dep->name = strdup(e->dst);
-      mult_dep->name_left = strdup(e->expr->left);
-      mult_dep->name_right = strdup(e->expr->right);
-      mult_dep->contained_secrets = NULL;
-      mult_dep->idx_same_as = -1;
 
-      mult_deps->deps[mult_idx] = mult_dep;
+      if(!(e->correction)){
+        MultDependency* mult_dep = malloc(sizeof(*mult_dep));
+        mult_dep->left_ptr  = left->std_dep;
+        mult_dep->right_ptr = right->std_dep;
+        mult_dep->name = strdup(e->dst);
+        mult_dep->name_left = strdup(e->expr->left);
+        mult_dep->name_right = strdup(e->expr->right);
+        mult_dep->contained_secrets = NULL;
 
-      temporary_mult_idx[mult_idx] = malloc(2 * sizeof(*temporary_mult_idx[mult_idx]));
-      temporary_mult_idx[mult_idx][0] = str_map_get(positions_map, e->expr->left);
-      temporary_mult_idx[mult_idx][1] = str_map_get(positions_map, e->expr->right);
+        mult_deps->deps[mult_idx] = mult_dep;
 
-      dup_dep = left->dup_dep | right->dup_dep;
-
-      dep = calloc(deps_size, sizeof(*dep));
-      if(is_dep_constant(mult_dep->left_ptr, deps_size)){
-        // if the left operand is the constant term '1'
-        if(mult_dep->left_ptr[deps_size-1] != 0){
-          memcpy(dep, mult_dep->right_ptr, deps_size * sizeof(*dep));
-        }
-        else{printf("mult %s is mult by zero\n", e->dst);}
-      }
-      else if(is_dep_constant(mult_dep->right_ptr, deps_size)){
-        // if the right operand is the constant term '1'
-        if(mult_dep->right_ptr[deps_size-1] != 0){
-          memcpy(dep, mult_dep->left_ptr, deps_size * sizeof(*dep));
-        }
-        else{printf("mult %s is mult by zero\n", e->dst);}
-      }
-      else if(are_dep_equal(mult_dep->left_ptr, mult_dep->right_ptr, deps_size)){
-        printf("mult. %s has same expression on operands\n", e->dst);
-        memcpy(dep, mult_dep->left_ptr, deps_size * sizeof(*dep));
-      }
-      else{
-        int idx = -1;
-        for(int i=0; i<mult_idx; i++){
-          if((are_dep_equal(mult_dep->left_ptr, mult_deps->deps[i]->left_ptr, deps_size)) 
-            && (are_dep_equal(mult_dep->right_ptr, mult_deps->deps[i]->right_ptr, deps_size))){
-            idx = i;
-            break;
+        dep = calloc(deps_size, sizeof(*dep));
+        dep[linear_deps_size + mult_idx] = 1;
+        for(int k=linear_deps_size; k<linear_deps_size+mult_count; k++){
+          if(mult_dep->left_ptr[k] || mult_dep->right_ptr[k]){
+            fprintf(stderr, "Unsupported mult. variable %s. Multiplicative depth > 1. Exiting...\n", e->dst);
+            exit(EXIT_FAILURE);
           }
         }
-        if(idx != -1){
-          printf("mult. %s is the same as mult %s\n", e->dst, mult_deps->deps[idx]->name);
-          dep[linear_deps_size + idx] = 1;
-          mult_dep->idx_same_as = idx;
+
+        temporary_mult_idx[mult_idx] = malloc(2 * sizeof(*temporary_mult_idx[mult_idx]));
+        temporary_mult_idx[mult_idx][0] = str_map_get(positions_map, e->expr->left);
+        temporary_mult_idx[mult_idx][1] = str_map_get(positions_map, e->expr->right);
+
+        faulted[add_idx] = faulted[str_map_get(positions_map, e->expr->left)] || 
+                           faulted[str_map_get(positions_map, e->expr->right)];
+
+        mult_idx++;
+      }
+      else{
+
+        dep = calloc(deps_size, sizeof(*dep));
+        if(is_dep_constant(left->std_dep, deps_size) &&
+           !faulted[str_map_get(positions_map, e->expr->left)]){
+          // if the left operand is the constant term '1'
+          if(left->std_dep[deps_size-1] != 0){
+            memcpy(dep, right->std_dep, deps_size * sizeof(*dep));
+            faulted[add_idx] = faulted[str_map_get(positions_map, e->expr->right)];
+          }
+          else{
+            faulted[add_idx] = false;
+          }
+        }
+        else if(is_dep_constant(right->std_dep, deps_size) &&
+                !faulted[str_map_get(positions_map, e->expr->right)]){
+          printf("%s\n", e->dst);
+          // if the right operand is the constant term '1'
+          if(right->std_dep[deps_size-1] != 0){
+            memcpy(dep, left->std_dep, deps_size * sizeof(*dep));
+            faulted[add_idx] = faulted[str_map_get(positions_map, e->expr->left)];
+          }
+          else{
+            faulted[add_idx] = false;
+          }
+        }
+        else if(are_dep_equal(left->std_dep, right->std_dep, deps_size) &&
+                (!faulted[str_map_get(positions_map, e->expr->left)]) &&
+                (!faulted[str_map_get(positions_map, e->expr->right)])){
+
+          printf("mult. %s has same expression on operands\n", e->dst);
+          memcpy(dep, left->std_dep, deps_size * sizeof(*dep));
+          faulted[add_idx] = false;
+        }
+        else if(e->correction_output){
+          dep[deps->first_correction_idx + corr_output_idx] = 1;
+          faulted[add_idx] = false;
         }
         else{
-          dep[linear_deps_size + mult_idx] = 1;
+          faulted[add_idx] = true;
         }
       }
-      
-      mult_idx++;
-
     }
 
     // Taking glitches and transitions into account. We ignore the
     // interaction between glitches and transitions are assume that
     // either glitches or (exclusively) transitions are to be
     // considered.
-
-    bool dup_glitch = false;
-    /*if(__builtin_popcount(dup_dep) > 1){
-      if(e->expr->op == Mult){
-        if(!are_dep_equal(left->std_dep, right->std_dep, deps_size)){
-          printf("%s, ", e->dst, dup_dep);
-          dup_glitch = true;
-        }
-      }
-    }*/
-
     DepArrVector* dep_arr = DepArrVector_make();
-    if ((!glitch || e->anti_glitch) && (!dup_glitch)) {
+    if ((!glitch || e->anti_glitch) && (!faulted[add_idx])) {
       DepArrVector_push(dep_arr, dep);
     } else {
+      printf("SPLITTING %s\n", e->dst);
       for (int i = 0; i < left->glitch_trans_dep->length; i++) {
         if (!vec_contains_dep(dep_arr, left->glitch_trans_dep->content[i], deps_size)) {
           DepArrVector_push(dep_arr, left->glitch_trans_dep->content[i]);
@@ -972,7 +1004,7 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     if (transition) {
       DepMapElem* prev_value = dep_map_get(deps_map, e->dst);
 
-      if(dup_glitch){
+      if(faulted[add_idx]){
         for(int i=0; i< prev_value->glitch_trans_dep->length; i++){
           if(!DepArrVector_contains(dep_arr, prev_value->glitch_trans_dep->content[i])){
             DepArrVector_push(dep_arr, prev_value->glitch_trans_dep->content[i]);
@@ -982,9 +1014,31 @@ Circuit* gen_circuit(int shares, EqList* eqs,
       else{
         DepArrVector_push(dep_arr, prev_value->std_dep);
       }
-      
     }
 
+    if(dep[deps->first_correction_idx + corr_output_idx] == 1){
+      DepArrVector* dep_arr_corr = DepArrVector_make();
+      for (int i = 0; i < left->glitch_trans_dep->length; i++) {
+        if (!vec_contains_dep(dep_arr_corr, left->glitch_trans_dep->content[i], deps_size)) {
+          DepArrVector_push(dep_arr_corr, left->glitch_trans_dep->content[i]);
+        }
+      }
+      if (right) {
+        for (int i = 0; i < right->glitch_trans_dep->length; i++) {
+          if (!vec_contains_dep(dep_arr_corr, right->glitch_trans_dep->content[i], deps_size)) {
+            DepArrVector_push(dep_arr_corr, right->glitch_trans_dep->content[i]);
+          }
+        }
+      }
+      correction_outputs->correction_outputs_deps[corr_output_idx] = dep_arr_corr;
+      correction_outputs->correction_outputs_names[corr_output_idx] = strdup(e->dst);
+      corr_output_idx++;
+    }
+    else if(e->correction_output){
+      correction_outputs->correction_outputs_deps[corr_output_idx] = DepArrVector_make();
+      correction_outputs->correction_outputs_names[corr_output_idx] = strdup(e->dst);
+      corr_output_idx++;
+    }
 
     // Updating weights
     int left_idx = str_map_get(positions_map, e->expr->left);
@@ -998,7 +1052,7 @@ Circuit* gen_circuit(int shares, EqList* eqs,
     deps->deps[add_idx]       = dep_arr;
     deps->deps_exprs[add_idx] = dep;
     deps->names[add_idx]      = strdup(e->dst);
-    dep_map_add(deps_map, strdup(e->dst), dep, dup_dep, dep_arr);
+    dep_map_add(deps_map, strdup(e->dst), dep, dep_arr);
     str_map_add(positions_map, strdup(e->dst));
   }
 
@@ -1087,20 +1141,21 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   compute_contained_secrets(c, temporary_mult_idx);
   compute_bit_deps(c, temporary_mult_idx);
 
+
+  print_circuit(c);
+
+  // print_eq_full_expr(eqs, "c1_0");
+  // printf("\n\n");
+  // print_eq_full_expr(eqs, "temp156");
+  // printf("\n\n");
+  // print_eq_full_expr(eqs, "temp91");
+  // printf("\n\n");
+
   for(int i=0; i<mult_count; i++){
     free(temporary_mult_idx[i]);
   }
   free(temporary_mult_idx);
-
-
-  print_circuit(c);
-
-  // get_eq_expr(eqs, "temp204");
-  // printf("\n\n");
-  // get_eq_expr(eqs, "temp198");
-  // printf("\n\n");
-  // get_eq_expr(eqs, "temp189");
-  // printf("\n\n");
+  free(faulted);
 
   free_str_map(in);
   free_str_map(randoms);
@@ -1110,7 +1165,8 @@ Circuit* gen_circuit(int shares, EqList* eqs,
   free_dep_map(deps_map);
   free_eq_list(eqs);
 
-  //exit(EXIT_FAILURE);
+  exit(EXIT_FAILURE);
+
 
   return c;
 }

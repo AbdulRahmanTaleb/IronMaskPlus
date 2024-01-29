@@ -85,6 +85,7 @@ typedef struct _hashmap {
   int deps_size; // size of the Dependency* in the hash
   int first_rand_idx;
   int non_mult_deps_count;
+  int mult_count;
   int mults_len; // Length of the |mults| array in MultNodes
   int rands_len; // Length of the |rands| array in HashNodes
   int count; // Number of elements in the hash
@@ -94,15 +95,16 @@ typedef struct _hashmap {
 static HashMap* init_map(Circuit* circuit) {
   int deps_size = circuit->deps->deps_size;
   int first_rand_idx = circuit->deps->first_rand_idx;
-  int non_mult_deps_count = deps_size - circuit->deps->mult_deps->length - 1;
+  int non_mult_deps_count = circuit->secret_count + circuit->random_count;
   HashMap* map    = malloc(sizeof(*map));
   map->content    = calloc(HASH_SIZE, sizeof(*(map->content)));
   map->deps_size  = deps_size;
   map->first_rand_idx = first_rand_idx;
   map->non_mult_deps_count = non_mult_deps_count;
-  map->mults_len = (deps_size - non_mult_deps_count) / 64 + 1;
+  map->mults_len = circuit->deps->mult_deps->length / 64 + 1;
   map->rands_len = (non_mult_deps_count - circuit->secret_count) / 64 + 1;
   map->count      = 0;
+  map->mult_count = circuit->deps->mult_deps->length;
   return map;
 }
 
@@ -188,7 +190,7 @@ static void build_rands_bitmap(HashMap* map, Dependency* dep, uint64_t* rands) {
 
 static void build_mults_bitmap(HashMap* map, Dependency* dep, uint64_t* mults) {
   int non_mult_deps_count = map->non_mult_deps_count;
-  int mult_count = map->deps_size - non_mult_deps_count;
+  int mult_count = map->mult_count;
   int mults_len = map->mults_len;
 
   memset(mults, 0, mults_len * sizeof(*mults));
@@ -303,7 +305,7 @@ VarVector* remove_from_subcircuit(VarVector* subcircuit, VarVector* to_remove) {
 int is_zero_or_elementary(Circuit* circuit, Dependency* dep) {
   DependencyList* deps = circuit->deps;
   int deps_size = deps->deps_size;
-  int non_mult_deps_count = deps->deps_size - deps->mult_deps->length - 1;
+  int non_mult_deps_count = circuit->secret_count + circuit->random_count;
 
   int elem_count = 0;
   for (int i = 0; i < circuit->secret_count; i++) {
@@ -418,7 +420,7 @@ int has_one_more_mult(Circuit* circuit, Var larger, Var smaller) {
   DependencyList* deps = circuit->deps;
   Dependency* dep_larger  = deps->deps[larger]->content[0];
   Dependency* dep_smaller = deps->deps[smaller]->content[0];
-  int non_mult_deps_count = deps->deps_size - deps->mult_deps->length - 1;
+  int non_mult_deps_count = circuit->secret_count + circuit->random_count;
   int first_rand_idx = deps->first_rand_idx;
 
   for (int i = first_rand_idx; i < non_mult_deps_count; i++) {
@@ -437,7 +439,7 @@ int has_one_more_mult(Circuit* circuit, Var larger, Var smaller) {
     }
 
     int additional_mults_count = 0;
-    for (int i = non_mult_deps_count; i < deps->deps_size; i++) {
+    for (int i = non_mult_deps_count; i < deps->mult_deps->length; i++) {
       if (dep_smaller[i] && !dep_larger[i]) {
         // |smaller| contains a multiplication that |larger| does not
         // contain. This is the opposite of what we want!
@@ -710,7 +712,7 @@ bool is_elementary(Circuit* circuit, Dependency* dep) {
   int deps_size           = deps->deps_size;
   int first_rand_idx      = deps->first_rand_idx;
   int has_input_rands     = circuit->has_input_rands;
-  int non_mult_deps_count = deps_size - deps->mult_deps->length - 1;
+  int non_mult_deps_count = circuit->secret_count + circuit->random_count;
 
   // make sure it does not contain any random values
   for (int i = first_rand_idx; i < non_mult_deps_count; i++) {
@@ -726,7 +728,7 @@ bool is_elementary(Circuit* circuit, Dependency* dep) {
 
   // ensure that if it is a multiplication, then it is between two input shares
   int mult_count = 0;
-  for (int i = non_mult_deps_count; i < deps_size-1; i++) {
+  for (int i = non_mult_deps_count; i < non_mult_deps_count+circuit->deps->mult_deps->length; i++) {
     if (dep[i]){
       mult_count++;
       if(!_is_elementary_multiplication(circuit, deps->mult_deps->deps[i-non_mult_deps_count])){
@@ -831,7 +833,7 @@ void remove_randoms(Circuit* circuit) {
   new_deps->contained_secrets = malloc(deps->length * sizeof(*new_deps->contained_secrets));
   new_deps->bit_deps       = malloc(deps->length * sizeof(*new_deps->bit_deps));
 
-  int non_mult_deps_count = deps->deps_size - deps->mult_deps->length - 1;
+  int non_mult_deps_count = circuit->secret_count + circuit->random_count;
 
   bool is_random = false;
   int rand_count = 0;
@@ -843,7 +845,7 @@ void remove_randoms(Circuit* circuit) {
     for(int j=0; j< deps->first_rand_idx; j++){
       is_random = is_random && (deps->deps[i]->content[0][j] == 0);
     }
-    for (int j = non_mult_deps_count; j < deps->deps_size; j++) {
+    for (int j = non_mult_deps_count; j < non_mult_deps_count+deps->mult_deps->length; j++) {
       is_random = is_random && (deps->deps[i]->content[0][j] == 0);
     }
     for(int j=deps->first_rand_idx; j<non_mult_deps_count ; j++){
