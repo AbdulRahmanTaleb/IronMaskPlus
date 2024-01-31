@@ -1,3 +1,6 @@
+#ifndef CIRCUIT_H
+#define CIRCUIT_H
+
 #pragma once
 
 #include <stdlib.h>
@@ -38,6 +41,7 @@ typedef struct _multDep {
   char * name_right;
   Dependency* left_ptr;
   Dependency* right_ptr;
+  int idx_same_dependencies;
   struct _BitDepVector_vector* bits_left;
   struct _BitDepVector_vector* bits_right;
   Dependency* contained_secrets; // Array of size secret_count containing
@@ -53,6 +57,7 @@ typedef struct _multDependencyList {
 
 typedef struct _correctionOutputDependency {
   struct _DepArrVector_vector** correction_outputs_deps;
+  struct _BitDepVector_vector** correction_outputs_deps_bits;
   char ** correction_outputs_names;
   int length;
 } CorrectionOutputs;
@@ -112,6 +117,17 @@ typedef struct _circuit {
   uint64_t bit_i2_rands[RANDOMS_MAX_LEN];
 } Circuit;
 
+typedef struct _faulted_var{
+  char * name;
+  bool set;
+}FaultedVar;
+
+typedef struct _faults_struct{
+  FaultedVar ** vars;
+  int length;
+}Faults;
+
+
 
 void compute_total_wires(Circuit* c);
 void compute_rands_usage(Circuit* c);
@@ -122,3 +138,5 @@ void print_circuit(const Circuit* c);
 void print_circuit_after_dim_red(const Circuit* c, const Circuit* c_old);
 void free_circuit(Circuit* c);
 Circuit* shallow_copy_circuit(Circuit* c);
+
+#endif

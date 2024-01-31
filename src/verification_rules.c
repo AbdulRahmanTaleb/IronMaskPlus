@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <inttypes.h>
 
 #include "verification_rules.h"
 #include "list_tuples.h"
@@ -317,6 +318,7 @@ static void gauss_step(BitDep* real_dep,
                        GaussRand* gauss_rands,
                        int bit_rand_len,
                        int bit_mult_len,
+                       int bit_correction_outputs_len,
                        int idx) {
   BitDep* dep_target = gauss_deps[idx];
   if (dep_target != real_dep) {
@@ -335,6 +337,11 @@ static void gauss_step(BitDep* real_dep,
       for (int j = 0; j < bit_mult_len; j++) {
         dep_target->mults[j] ^= gauss_deps[i]->mults[j];
       }
+      for (int j = 0; j < bit_correction_outputs_len; j++) {
+        dep_target->correction_outputs[j] ^= gauss_deps[i]->correction_outputs[j];
+      }
+      dep_target->constant ^= gauss_deps[i]->constant;
+
       dep_target->out ^= gauss_deps[i]->out;
     }
   }
@@ -381,11 +388,13 @@ static int is_failure_with_randoms(const Circuit* circuit,
   DependencyList* deps = circuit->deps;
   int secret_count = circuit->secret_count;
   int random_count = circuit->random_count + secret_count;
-  int deps_size = deps->deps_size;
   int mult_count = deps->mult_deps->length;
   int non_mult_deps_count = circuit->secret_count + circuit->random_count;
   int bit_rand_len = 1 + random_count / 64;
-  int bit_mult_len = 1 + mult_count / 64;
+  int corr_outputs_count = deps->correction_outputs->length;
+
+  int bit_mult_len = (mult_count == 0) ? 0 :  1 + mult_count / 64;
+  int bit_correction_outputs_len = (corr_outputs_count == 0) ? 0 : 1 + corr_outputs_count / 64;
 
   // Collecting all randoms of |local_deps| in the binary array |randoms|.
   uint64_t randoms[bit_rand_len];
@@ -485,7 +494,7 @@ static int is_failure_with_randoms(const Circuit* circuit,
 
       for (int i = 0; i < copy_size; i++) {
           gauss_step(local_deps_copy[i], local_deps_copy, gauss_rands_copy,
-                    bit_rand_len, bit_mult_len, i);
+                    bit_rand_len, bit_mult_len, bit_correction_outputs_len, i);
           set_gauss_rand(local_deps_copy, gauss_rands_copy, i, bit_rand_len);
       }
 
@@ -534,6 +543,33 @@ static int is_failure_with_randoms(const Circuit* circuit,
 //    factorized_deps[b0] ^= (a0 ^ r0)
 //    factorized_deps[r1] ^= (a0 ^ r0)
 //
+
+static void factorize_expr(BitDep** factorized_deps, int idx,
+                           Dependency* dep, int secret_count, 
+                           int non_mult_deps_count, int corr_output_length,
+                           int corr_output_first_idx, int deps_size){
+
+  for (int j = 0; j < secret_count; j++) {
+    if (dep[j]) {
+      factorized_deps[idx]->secrets[j] ^= dep[j];
+    }
+  }
+  for (int j = secret_count; j < non_mult_deps_count; j++) {
+    if (dep[j]) {
+      factorized_deps[idx]->randoms[j/64] ^= 1ULL << (j%64);
+    }
+  }
+  for(int k=0; k<corr_output_length; k++){
+    if (dep[k+corr_output_first_idx]) {
+      factorized_deps[idx]->correction_outputs[k/64] ^= 1ULL << (k%64);
+    }
+  }
+  if(dep[deps_size-1]){
+    factorized_deps[idx]->constant = 1;
+  }
+}
+
+
 void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
                            MultDependency* mult) {
   int secret_count        = c->secret_count;
@@ -543,6 +579,13 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
   Dependency* left  = mult->left_ptr;
   Dependency* right = mult->right_ptr;
 
+  /*for(int i=0; i<c->deps->deps_size; i++){
+    printf("%" PRId32", %"PRId32"\n", left[i], right[i]);
+  }*/
+
+  int corr_output_first_idx = c->deps->first_correction_idx;
+  int corr_output_length = c->deps->correction_outputs->length;
+
   // Inputs
   for (int i = 0; i < 2; i++) {
     if ((left[i]!=0) && (right[i]!=0)){
@@ -551,33 +594,15 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
     }
     for (int j = 0; j < share_count; j++) {
       if (left[i] & (1ULL << j)) {
-        for (int k = 0; k < secret_count; k++) {
-          if (right[k]) {
-            factorized_deps[i*share_count+j]->secrets[k] ^= right[k];
-          }
-        }
-        for (int k = secret_count; k < non_mult_deps_count; k++) {
-          if (right[k]) {
-            factorized_deps[i*share_count+j]->randoms[k/64] ^= 1ULL << (k%64);
-          }
-        }
-        if(right[c->deps->deps_size-1]){
-          factorized_deps[i*share_count+j]->constant = 1;
-        }
+        factorize_expr(factorized_deps, i*share_count+j, right,
+                       secret_count, non_mult_deps_count, corr_output_length,
+                       corr_output_first_idx, c->deps->deps_size);
+
       } else if (right[i] & (1ULL << j)) {
-        for (int k = 0; k < secret_count; k++) {
-          if (left[k]) {
-            factorized_deps[i*share_count+j]->secrets[k] ^= left[k];
-          }
-        }
-        for (int k = secret_count; k < non_mult_deps_count; k++) {
-          if (left[k]) {
-            factorized_deps[i*share_count+j]->randoms[k/64] ^= 1ULL << (k%64);
-          }
-        }
-        if(left[c->deps->deps_size-1]){
-          factorized_deps[i*share_count+j]->constant = 1;
-        }
+
+        factorize_expr(factorized_deps, i*share_count+j, left,
+                       secret_count, non_mult_deps_count, corr_output_length,
+                       corr_output_first_idx, c->deps->deps_size);
       }
     }
   }
@@ -590,69 +615,53 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
       exit(EXIT_FAILURE);
     }
     if (left[i]) {
-      for (int j = 0; j < secret_count; j++) {
-        if (right[j]) {
-          factorized_deps[i+rand_offset]->secrets[j] ^= right[j];
-        }
-      }
-      for (int j = secret_count; j < non_mult_deps_count; j++) {
-        if (right[j]) {
-          factorized_deps[i+rand_offset]->randoms[j/64] ^= 1ULL << (j%64);
-        }
-      }
-      if(right[c->deps->deps_size-1]){
-        factorized_deps[i+rand_offset]->constant = 1;
-      }
+
+      factorize_expr(factorized_deps, i+rand_offset, right,
+                     secret_count, non_mult_deps_count, corr_output_length,
+                     corr_output_first_idx, c->deps->deps_size);
+
     } else if (right[i]) {
-      for (int j = 0; j < secret_count; j++) {
-        if (left[j]) {
-          factorized_deps[i+rand_offset]->secrets[j] ^= left[j];
-        }
-      }
-      for (int j = secret_count; j < non_mult_deps_count; j++) {
-        if (left[j]) {
-          factorized_deps[i+rand_offset]->randoms[j/64] ^= 1ULL << (j%64);
-        }
-      }
-      if(left[c->deps->deps_size-1]){
-        factorized_deps[i+rand_offset]->constant = 1;
-      }
+
+      factorize_expr(factorized_deps, i+rand_offset, left,
+                     secret_count, non_mult_deps_count, corr_output_length,
+                     corr_output_first_idx, c->deps->deps_size);
     }
   }
 
+  int corr_output_offset = inputs_real_count + c->random_count;
+  //correction outputs terms
+  for (int i = 0; i < corr_output_length; i++) {
+    if ((left[i+corr_output_first_idx]) && (right[i+corr_output_first_idx])){
+      fprintf(stderr, "factorize_inner_mults(): Unsupported format for variable '%s' in a multiplication gadget. Operands contain same correction output of index '%d'\n", mult->name, i);
+      exit(EXIT_FAILURE);
+    }
+    if (left[i+corr_output_first_idx]) {
+
+      factorize_expr(factorized_deps, i+corr_output_offset, right,
+                     secret_count, non_mult_deps_count, corr_output_length,
+                     corr_output_first_idx, c->deps->deps_size);
+
+    } else if (right[i+corr_output_first_idx]) {
+
+      factorize_expr(factorized_deps, i+corr_output_offset, left,
+                  secret_count, non_mult_deps_count, corr_output_length,
+                  corr_output_first_idx, c->deps->deps_size);
+    }
+  }
+
+
   //constant term
-  int i = c->deps->deps_size - 1;
-  int const_offset = inputs_real_count + c->random_count;
-  if (left[i]) {
-    for (int j = 0; j < secret_count; j++) {
-      if (right[j]) {
-        factorized_deps[i+const_offset]->secrets[j] ^= right[j];
-      }
-    }
-    for (int j = secret_count; j < non_mult_deps_count; j++) {
-      if (right[j]) {
-        factorized_deps[i+const_offset]->randoms[j/64] ^= 1ULL << (j%64);
-      }
-    }
-    if(right[c->deps->deps_size-1]){
-      factorized_deps[i+const_offset]->constant = 1;
-    }
+  int const_offset = inputs_real_count + c->random_count + c->deps->correction_outputs->length;
+  if (left[c->deps->deps_size-1]) {
+    factorize_expr(factorized_deps, const_offset, right,
+                     secret_count, non_mult_deps_count, corr_output_length,
+                     corr_output_first_idx, c->deps->deps_size);
   } 
   const_offset++;
-  if (right[i]) {
-    for (int j = 0; j < secret_count; j++) {
-      if (left[j]) {
-        factorized_deps[i+const_offset]->secrets[j] ^= left[j];
-      }
-    }
-    for (int j = secret_count; j < non_mult_deps_count; j++) {
-      if (left[j]) {
-        factorized_deps[i+const_offset]->randoms[j/64] ^= 1ULL << (j%64);
-      }
-    }
-    if(left[c->deps->deps_size-1]){
-      factorized_deps[i+const_offset]->constant = 1;
-    }
+  if (right[c->deps->deps_size-1]) {
+    factorize_expr(factorized_deps, const_offset, left,
+                     secret_count, non_mult_deps_count, corr_output_length,
+                     corr_output_first_idx, c->deps->deps_size);
   }
 
 }
@@ -668,17 +677,17 @@ void factorize_mults(const Circuit* c, BitDep** local_deps,
   int rand_count          = c->random_count + c->secret_count;
   int mult_count          = deps->mult_deps->length;
   int bit_rand_len = 1 + rand_count / 64;
-  int bit_mult_len = 1 + mult_count / 64;
+  int bit_mult_len = (mult_count == 0) ? 0 :  1 + mult_count / 64;
 
-  bool* i1_rands = c->i1_rands;
-  bool* i2_rands = c->i2_rands;
+  int corr_outputs_count = deps->correction_outputs->length;
+  int bit_correction_outputs_len = (corr_outputs_count == 0) ? 0 : 1 + corr_outputs_count / 64;
 
   const uint64_t* bit_i1_rands  = c->bit_i1_rands;
   const uint64_t* bit_i2_rands  = c->bit_i2_rands;
   const uint64_t* bit_out_rands = c->bit_out_rands;
 
   int inputs_real_count = c->secret_count * c->share_count;
-  int factorized_deps_length = inputs_real_count + c->random_count + 2; // + 2 for the constant terms on both sides
+  int factorized_deps_length = inputs_real_count + c->random_count + deps->correction_outputs->length + 2; // + 2 for the constant terms on both sides
 
   BitDep* factorized_deps[factorized_deps_length];
   for (int i = 0; i < factorized_deps_length; i++) {
@@ -708,6 +717,8 @@ void factorize_mults(const Circuit* c, BitDep** local_deps,
       deps_fact[*deps_length_fact]->secrets[1] = dep->secrets[1];
       memcpy(deps_fact[*deps_length_fact]->randoms, dep->randoms,
              bit_rand_len * sizeof(*dep->randoms));
+      memcpy(deps_fact[*deps_length_fact]->correction_outputs, dep->correction_outputs,
+             bit_correction_outputs_len * sizeof(*dep->correction_outputs));
       // No need to copy multiplications
       (*deps_length_fact)++;
 
@@ -753,6 +764,8 @@ void factorize_mults(const Circuit* c, BitDep** local_deps,
       factorized_deps[j]->secrets[1] = 0;
       memset(factorized_deps[j]->randoms, 0,
              bit_rand_len * sizeof(*factorized_deps[j]->randoms));
+      memset(factorized_deps[j]->correction_outputs, 0,
+             bit_correction_outputs_len * sizeof(*factorized_deps[j]->correction_outputs));
     }
 
     for (int j = 0; j < bit_mult_len; j++) {
@@ -762,32 +775,82 @@ void factorize_mults(const Circuit* c, BitDep** local_deps,
         mult_elem &= ~(1ULL << (63-mult_idx_in_elem));
         int mult_idx = j * 64 + (63-mult_idx_in_elem);
         MultDependency* mult = deps->mult_deps->deps[mult_idx];
+        printf("mult = %s\n", mult->name);
         factorize_inner_mults(c, factorized_deps, mult);
       }
     }
 
     // We now copy the factorized exrepssions in |deps_fact|
-    int rand_offset = inputs_real_count - c->secret_count;
     for (int i = 0; i < factorized_deps_length; i++) {
+
       int rand_set = 0;
       for (int j = 0; j < bit_rand_len && !rand_set; j++) {
         rand_set |= factorized_deps[i]->randoms[j];
       }
+
+      int corr_output_set = 0;
+      for (int j = 0; j < bit_correction_outputs_len && !corr_output_set; j++) {
+        corr_output_set |= factorized_deps[i]->correction_outputs[j];
+      }
+
       if (!(factorized_deps[i]->secrets[0] ||
             factorized_deps[i]->secrets[1] ||
-            rand_set)) {
+            rand_set || corr_output_set)) {
         // This element is empty; continuing
         continue;
       }
 
       deps_fact[*deps_length_fact]->secrets[0] = factorized_deps[i]->secrets[0];
       deps_fact[*deps_length_fact]->secrets[1] = factorized_deps[i]->secrets[1];
+
       memcpy(deps_fact[*deps_length_fact]->randoms, factorized_deps[i]->randoms,
               bit_rand_len * sizeof(*factorized_deps[i]->randoms));
+
+      memcpy(deps_fact[*deps_length_fact]->correction_outputs, factorized_deps[i]->correction_outputs,
+              bit_correction_outputs_len * sizeof(*factorized_deps[i]->correction_outputs));
       (*deps_length_fact)++;
     }
   }
 
+}
+
+static void replace_correction_outputs_in_dep(BitDep** local_deps, int idx, GaussRand* gauss_rands,
+                                                   int * local_deps_len, int bit_correction_outputs_len,
+                                                   int bit_rand_len, int bit_mult_len,
+                                                   CorrectionOutputs * correction_outputs){
+
+  if(gauss_rands[idx].is_set) return;
+
+  BitDep * bit_dep = local_deps[idx];
+
+  for(int i=0; i< bit_correction_outputs_len; i++){
+    //printf("Entering %d\n", idx);
+    uint64_t corr_out_elem = bit_dep->correction_outputs[i];
+
+    while (corr_out_elem != 0) {
+      int corr_output_idx_in_elem = __builtin_ia32_lzcnt_u64(corr_out_elem);
+      corr_out_elem &= ~(1ULL << (63-corr_output_idx_in_elem));
+      int corr_out_idx = i * 64 + (63-corr_output_idx_in_elem);
+
+      BitDepVector * bit_dep_arr = correction_outputs->correction_outputs_deps_bits[corr_out_idx];
+
+      //printf("i = %d of length %d\n", corr_out_idx, bit_dep_arr->length);
+
+      for(int dep_idx=0; dep_idx< bit_dep_arr->length; dep_idx++){
+
+        gauss_step(bit_dep_arr->content[dep_idx], local_deps, gauss_rands,
+                bit_rand_len, bit_mult_len, bit_correction_outputs_len, *local_deps_len);
+        set_gauss_rand(local_deps, gauss_rands, *local_deps_len, bit_rand_len);
+
+        (*local_deps_len)++;
+
+        replace_correction_outputs_in_dep(local_deps, *local_deps_len - 1, gauss_rands,
+                                               local_deps_len, bit_correction_outputs_len,
+                                               bit_rand_len, bit_mult_len,
+                                               correction_outputs);
+      }
+    }
+  }
 }
 
 // Increments |comb| (in place) whose length is |k|. Returns the first
@@ -941,9 +1004,9 @@ int _verify_tuples(const Circuit* circuit, // The circuit
   int contains_mults      = circuit->contains_mults;
   int corr_outputs_count = deps->correction_outputs->length;
 
-  int bit_mult_len = 1 + (mult_count / 64);
   int bit_rand_len = 1 + (random_count / 64);
-  int bit_correction_outputs_len = 1 + corr_outputs_count / 64;
+  int bit_mult_len = (mult_count == 0) ? 0 :  1 + mult_count / 64;
+  int bit_correction_outputs_len = (corr_outputs_count == 0) ? 0 : 1 + corr_outputs_count / 64;
 
 
   prefix = prefix ? prefix : &empty_VarVector;
@@ -955,9 +1018,9 @@ int _verify_tuples(const Circuit* circuit, // The circuit
 
   // Retrieving bitvector-based structures
   BitDepVector** bit_deps  = deps->bit_deps;
-  const uint64_t* bit_out_rands = circuit->bit_out_rands;
-  const uint64_t* bit_i1_rands  = circuit->bit_i1_rands;
-  const uint64_t* bit_i2_rands  = circuit->bit_i2_rands;
+  //const uint64_t* bit_out_rands = circuit->bit_out_rands;
+  //const uint64_t* bit_i1_rands  = circuit->bit_i1_rands;
+  //const uint64_t* bit_i2_rands  = circuit->bit_i2_rands;
 
   // Since elementary probes have been removed, a tuple can be a failure
   // without containing more than |t_in| secret shares: it suffices
@@ -1069,9 +1132,13 @@ int _verify_tuples(const Circuit* circuit, // The circuit
       BitDepVector* bit_dep_arr = bit_deps[curr_comb[i]];
       for (int dep_idx = 0; dep_idx < bit_dep_arr->length; dep_idx++) {
         gauss_step(bit_dep_arr->content[dep_idx], local_deps, gauss_rands,
-                   bit_rand_len, bit_mult_len, local_deps_len);
+                   bit_rand_len, bit_mult_len, bit_correction_outputs_len, local_deps_len);
         set_gauss_rand(local_deps, gauss_rands, local_deps_len, bit_rand_len);
         local_deps_len++;
+        printf("%s\n", circuit->deps->names[curr_comb[0]]);
+        replace_correction_outputs_in_dep(local_deps, local_deps_len - 1, gauss_rands, &local_deps_len, 
+                                               bit_correction_outputs_len, bit_rand_len,
+                                               bit_mult_len, deps->correction_outputs);
       }
     }
     first_invalid_mult_index_fact = min(first_invalid_mult_index_fact,
@@ -1142,9 +1209,28 @@ int _verify_tuples(const Circuit* circuit, // The circuit
         }
       }
 
-      //printf("HERE\n");
-
       // Factorizing tuple
+
+      for (int h = 0; h < local_deps_len; h++) {
+        printf("  [ %"PRId32" %"PRId32" | ",
+                  local_deps[h]->secrets[0], local_deps[h]->secrets[1]);
+        for (int k = 0; k < bit_rand_len; k++){
+          printf("%"PRId64" ", local_deps[h]->randoms[k]);
+        }
+        printf(" | "); 
+        if(circuit->contains_mults){
+          for (int k = 0; k < bit_mult_len; k++){
+            printf("%"PRId64" ", local_deps[h]->mults[k]);
+          }
+        } 
+        printf(" | "); 
+        for (int k = 0; k < bit_correction_outputs_len; k++){
+          printf("%" PRId64 " ", local_deps[h]->correction_outputs[k]);
+        }
+        printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
+      
+      }
+      printf("\n");
 
       printf("FACTORISING %s\n", circuit->deps->names[curr_comb[0]]);
 
@@ -1157,19 +1243,100 @@ int _verify_tuples(const Circuit* circuit, // The circuit
       
       int up_to_date_deps_length_fact = deps_length_fact;
 
+      // factorize
       for (int i = first_invalid_mult_index_in_local_deps_fact; i < local_deps_len; i++) {
+        local_deps_to_mult_map_fact[i] = deps_length_fact;
+
+        //printf("length before = %d\n", deps_length_fact);
+
+        // TODO: it's more efficient to call factorize_mults only once...
+        factorize_mults(circuit, &local_deps[i], deps_fact,
+                        &deps_length_fact, 1);
+
+        printf("BEFORE:\n");
+        for (int h = 0; h < deps_length_fact; h++) {
+          printf("  [ %"PRId32" %"PRId32" | ",
+                    deps_fact[h]->secrets[0], deps_fact[h]->secrets[1]);
+          for (int k = 0; k < bit_rand_len; k++){
+            printf("%"PRId64" ", deps_fact[h]->randoms[k]);
+          }
+          printf(" | "); 
+          if(circuit->contains_mults){
+            for (int k = 0; k < bit_mult_len; k++){
+              printf("%"PRId64" ", deps_fact[h]->mults[k]);
+            }
+          } 
+          printf(" | "); 
+          for (int k = 0; k < bit_correction_outputs_len; k++){
+            printf("%" PRId64 " ", deps_fact[h]->correction_outputs[k]);
+          }
+          printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
+        
+        }
+        printf("\n");
+
+        //printf("done factorizing, length=%d / %d\n",up_to_date_deps_length_fact, deps_length_fact);
+
+        // Apply Gauss on both tuples
+        for (int l = up_to_date_deps_length_fact; l < deps_length_fact; l++) {
+          gauss_step(deps_fact[l], deps_fact, deps_rands_fact, bit_rand_len, bit_mult_len, bit_correction_outputs_len, l);
+          set_gauss_rand(deps_fact, deps_rands_fact, i, bit_rand_len);
+
+          //printf("%d\n",l);
+          replace_correction_outputs_in_dep(deps_fact, l, deps_rands_fact, &deps_length_fact, 
+                                                bit_correction_outputs_len, bit_rand_len,
+                                                bit_mult_len, deps->correction_outputs);
+
+          //printf("next\n");
+        }
+
+        printf("AFTER:\n");
+        for (int h = 0; h < deps_length_fact; h++) {
+          printf("  [ %"PRId32" %"PRId32" | ",
+                    deps_fact[h]->secrets[0], deps_fact[h]->secrets[1]);
+          for (int k = 0; k < bit_rand_len; k++){
+            printf("%"PRId64" ", deps_fact[h]->randoms[k]);
+          }
+          printf(" | "); 
+          if(circuit->contains_mults){
+            for (int k = 0; k < bit_mult_len; k++){
+              printf("%"PRId64" ", deps_fact[h]->mults[k]);
+            }
+          } 
+          printf(" | "); 
+          for (int k = 0; k < bit_correction_outputs_len; k++){
+            printf("%" PRId64 " ", deps_fact[h]->correction_outputs[k]);
+          }
+          printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
+        
+        }
+        printf("\n");
+
+        up_to_date_deps_length_fact = deps_length_fact;
+
+      }
+
+      /*for (int i = first_invalid_mult_index_in_local_deps_fact; i < local_deps_len; i++) {
         local_deps_to_mult_map_fact[i] = deps_length_fact;
 
         // TODO: it's more efficient to call factorize_mults only once...
         factorize_mults(circuit, &local_deps[i], deps_fact,
                         &deps_length_fact, 1);
-      }
 
-      // Apply Gauss on both tuples
-      for (int i = up_to_date_deps_length_fact; i < deps_length_fact; i++) {
-        gauss_step(deps_fact[i], deps_fact, deps_rands_fact, bit_rand_len, bit_mult_len, i);
-        set_gauss_rand(deps_fact, deps_rands_fact, i, bit_rand_len);
-      }
+        for (int j = up_to_date_deps_length_fact; j < deps_length_fact; j++) {
+
+          gauss_step(deps_fact[j], deps_fact, deps_rands_fact, bit_rand_len, bit_mult_len, bit_correction_outputs_len, j);
+          set_gauss_rand(deps_fact, deps_rands_fact, j, bit_rand_len);
+
+          replace_correction_outputs_in_last_dep(deps_fact, j, deps_rands_fact, &deps_length_fact, 
+                                               bit_correction_outputs_len, bit_rand_len,
+                                               bit_mult_len, deps->correction_outputs);
+
+          printf("FINISHED\n");
+        }
+
+        up_to_date_deps_length_fact = deps_length_fact;
+      }*/
 
       secret_deps[0] = secret_deps[1] = 0;
       leaky_inputs[0] = leaky_inputs[1] = 0;
@@ -1623,7 +1790,7 @@ int check_output_uniformity(const Circuit * circuit, BitDep** output_deps, Gauss
   int random_count        = circuit->random_count + secret_count;
   int bit_rand_len = 1 + (random_count / 64);
   int mult_count          = deps->mult_deps->length;
-  int bit_mult_len = 1 + (mult_count / 64);
+  int bit_mult_len = (mult_count == 0) ? 0 :  1 + mult_count / 64;
 
   // Retrieving bitvector-based structures
   BitDepVector** bit_deps  = deps->bit_deps;
@@ -1653,23 +1820,23 @@ int check_output_uniformity(const Circuit * circuit, BitDep** output_deps, Gauss
     printf("  [ %u %u | ",
               output_deps[i]->secrets[0], output_deps[i]->secrets[1]);
     for (int k = 0; k < bit_rand_len; k++){
-      printf("%llu ", output_deps[i]->randoms[k]);
+      printf("%" PRIu64 " ", output_deps[i]->randoms[k]);
     }
     printf(" | "); 
     if(circuit->contains_mults){
       for (int k = 0; k < bit_mult_len; k++){
-        printf("%llu ", output_deps[i]->mults[k]);
+        printf("%" PRIu64 "", output_deps[i]->mults[k]);
       }
     } 
     printf("| %u ", output_deps[i]->out); 
     printf("]");
-    printf(" -- gauss_rand = %llu", gauss_rands[i].mask);
+    printf(" -- gauss_rand = %" PRIu64 "", gauss_rands[i].mask);
     printf(" }\n");
   }
   printf("\n\n");
 
   for(int i=0; i< circuit->share_count; i++){
-    gauss_step(output_deps[i], output_deps, gauss_rands, bit_rand_len, bit_mult_len, i);
+    gauss_step(output_deps[i], output_deps, gauss_rands, bit_rand_len, bit_mult_len, 0, i);
     set_gauss_rand(output_deps, gauss_rands, i, bit_rand_len);
   }
 
@@ -1679,17 +1846,17 @@ int check_output_uniformity(const Circuit * circuit, BitDep** output_deps, Gauss
     printf("  [ %u %u | ",
               output_deps[i]->secrets[0], output_deps[i]->secrets[1]);
     for (int k = 0; k < bit_rand_len; k++){
-      printf("%llu ", output_deps[i]->randoms[k]);
+      printf("%" PRIu64 " ", output_deps[i]->randoms[k]);
     }
     printf(" | "); 
     if(circuit->contains_mults){
       for (int k = 0; k < bit_mult_len; k++){
-        printf("%llu ", output_deps[i]->mults[k]);
+        printf("%" PRIu64 " ", output_deps[i]->mults[k]);
       }
     } 
     printf("| %u ", output_deps[i]->out); 
     printf("]");
-    printf(" -- gauss_rand = %llu", gauss_rands[i].mask);
+    printf(" -- gauss_rand = %" PRIu64, gauss_rands[i].mask);
     printf(" }\n");
   }
   printf("\n\n");
@@ -1913,11 +2080,10 @@ static int is_failure_with_randoms_freeSNI_IOS(const Circuit* circuit,
   DependencyList* deps = circuit->deps;
   int secret_count = circuit->secret_count;
   int random_count = circuit->random_count + secret_count;
-  int deps_size = deps->deps_size;
   int mult_count = deps->mult_deps->length;
   int non_mult_deps_count = circuit->secret_count + circuit->random_count;
   int bit_rand_len = 1 + random_count / 64;
-  int bit_mult_len = 1 + mult_count / 64;
+  int bit_mult_len = (mult_count == 0) ? 0 :  1 + mult_count / 64;
 
   // Collecting all randoms of |local_deps| in the binary array |randoms|.
   uint64_t randoms[bit_rand_len];
@@ -1974,7 +2140,7 @@ static int is_failure_with_randoms_freeSNI_IOS(const Circuit* circuit,
 
       for (int i = 0; i < copy_size; i++) {
           gauss_step(local_deps_copy[i], local_deps_copy, gauss_rands_copy,
-                    bit_rand_len, bit_mult_len, i);
+                    bit_rand_len, bit_mult_len, 0, i);
           set_gauss_rand(local_deps_copy, gauss_rands_copy, i, bit_rand_len);
       }
 
@@ -2022,7 +2188,7 @@ int _verify_tuples_freeSNI_IOS(const Circuit* circuit, // The circuit
   int secret_count        = circuit->secret_count;
   int random_count        = circuit->random_count + secret_count;
   int mult_count          = deps->mult_deps->length;
-  int bit_mult_len = 1 + (mult_count / 64);
+  int bit_mult_len = (mult_count == 0) ? 0 :  1 + mult_count / 64;
   int bit_rand_len = 1 + (random_count / 64);
   int last_var = circuit->length;
 
@@ -2110,12 +2276,12 @@ int _verify_tuples_freeSNI_IOS(const Circuit* circuit, // The circuit
       for (int dep_idx = 0; dep_idx < bit_dep_arr->length; dep_idx++) {
 
         gauss_step(bit_dep_arr->content[dep_idx], local_deps, gauss_rands,
-                   bit_rand_len, bit_mult_len, local_deps_len);
+                   bit_rand_len, bit_mult_len, 0, local_deps_len);
         set_gauss_rand(local_deps, gauss_rands, local_deps_len, bit_rand_len);
 
         //without outs
         gauss_step(bit_dep_arr->content[dep_idx], local_deps_without_outs, gauss_rands_without_outs,
-                   bit_rand_len, bit_mult_len, local_deps_without_outs_len);
+                   bit_rand_len, bit_mult_len, 0, local_deps_without_outs_len);
         set_gauss_rand(local_deps_without_outs, gauss_rands_without_outs, local_deps_without_outs_len, bit_rand_len);
 
 

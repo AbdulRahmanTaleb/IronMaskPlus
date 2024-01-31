@@ -250,20 +250,24 @@ void compute_contained_secrets(Circuit* c, int ** temporary_mult_idx) {
     }
   }
 
-  // MultDependencyList * mult_deps = c->deps->mult_deps;
-  // for (int i = 0; i < mult_deps->length; i++) {
+  MultDependencyList * mult_deps = c->deps->mult_deps;
+  for (int i = 0; i < mult_deps->length; i++) {
 
-  //     MultDependency* mult_dep = mult_deps->deps[i];
+      MultDependency* mult_dep = mult_deps->deps[i];
 
-  //     if(!(mult_dep->contained_secrets)){
-  //       if(mult_dep->idx_same_as != -1){
-  //         mult_dep->contained_secrets = mult_deps->deps[mult_dep->idx_same_as]->contained_secrets;
-  //       }
-  //       else{
-  //         mult_dep->contained_secrets = calloc(2, sizeof(**contained_secrets));
-  //       }
-  //     }
-  // }
+      if(!(mult_dep->contained_secrets)){
+          mult_dep->contained_secrets = calloc(2, sizeof(**contained_secrets));
+
+          for(int i=0; i< c->deps->length; i++){
+            if(strcmp(c->deps->names[i], mult_dep->name) == 0){
+              mult_dep->contained_secrets[0] = contained_secrets[i][0];
+              mult_dep->contained_secrets[1] = contained_secrets[i][1];
+              break;
+            }
+          }
+
+      }
+  }
 
   c->deps->contained_secrets = contained_secrets;
 }
@@ -283,8 +287,8 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
   int corr_outputs_count = deps->correction_outputs->length;
 
   int bit_rand_len = 1 + random_count / 64;
-  int bit_mult_len = 1 + mult_count / 64;
-  int bit_correction_outputs_len = 1 + corr_outputs_count / 64;
+  int bit_mult_len = (mult_count == 0) ? 0 :  1 + mult_count / 64;
+  int bit_correction_outputs_len = (corr_outputs_count == 0) ? 0 : 1 + corr_outputs_count / 64;
 
   for (int i = 0; i < deps->length; i++) {
     DepArrVector* dep = deps->deps[i];
@@ -331,6 +335,56 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
 
       BitDepVector_push(bit_deps[i], bit_dep);
     }
+  }
+
+  if(corr_outputs_count != 0){
+
+    DepArrVector ** correction_outputs_deps = deps->correction_outputs->correction_outputs_deps;
+    BitDepVector ** correction_outputs_deps_bits = malloc(corr_outputs_count  * sizeof(*correction_outputs_deps_bits));
+    for (int i = 0; i < corr_outputs_count; i++) {
+      DepArrVector* dep = correction_outputs_deps[i];
+      correction_outputs_deps_bits[i] = BitDepVector_make();
+      for (int j = 0; j < dep->length; j++) {
+        BitDep* bit_dep = calloc(1, sizeof(*bit_dep));
+        bit_dep->secrets[0] = dep->content[j][0];
+        if (secret_count == 2) bit_dep->secrets[1] = dep->content[j][1];
+
+        for (int k = 0; k < bit_rand_len; k++) {
+          for (int l = 0; l < 64; l++) {
+            if (k*64+l < secret_count) continue;
+            if (k*64+l >= random_count) continue;
+            if (dep->content[j][k*64+l]) {
+              bit_dep->randoms[k] |= 1ULL << l;
+            }
+          }
+        }
+
+        for (int k = 0; k < bit_mult_len; k++) {
+          for (int l = 0; l < 64; l++) {
+            if (k*64+l >= mult_count) break;
+            if (dep->content[j][non_mult_deps_count+k*64+l]) {
+              bit_dep->mults[k] |= 1ULL << l;
+            }
+          }
+        }
+
+        for (int k = 0; k < bit_correction_outputs_len; k++) {
+          for (int l = 0; l < 64; l++) {
+            if (k*64+l >= corr_outputs_count) break;
+            if (dep->content[j][corr_first_idx+k*64+l]) {
+              bit_dep->correction_outputs[k] |= 1ULL << l;
+            }
+          }
+        }
+
+        bit_dep->constant = dep->content[j][deps->deps_size-1];
+        bit_dep->out = 0;
+
+        BitDepVector_push(correction_outputs_deps_bits[i], bit_dep);
+      }
+    }
+
+    circuit->deps->correction_outputs->correction_outputs_deps_bits = correction_outputs_deps_bits;
   }
 
   /* printf("Bit dependencies:\n"); */
@@ -391,7 +445,6 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
 
 void print_circuit(const Circuit* c) {
   DependencyList* deps = c->deps;
-  int deps_size = deps->deps_size;
   MultDependencyList* mult_deps = deps->mult_deps;
 
   printf("Circuit with %d variables\n", c->length);
@@ -440,10 +493,11 @@ void print_circuit(const Circuit* c) {
   if (c->contains_mults) {
     printf("\nMultiplications:\n");
     for (int i = 0; i < mult_deps->length; i++) {
-      printf("%d - %s: %s * %s, [%d %d]\n", i,
+      printf("%d - %s: %s * %s, [%d %d], same as %d\n", i,
              mult_deps->deps[i]->name,
              mult_deps->deps[i]->name_left, mult_deps->deps[i]->name_right,
-             mult_deps->deps[i]->contained_secrets[0], mult_deps->deps[i]->contained_secrets[1]);
+             mult_deps->deps[i]->contained_secrets[0], mult_deps->deps[i]->contained_secrets[1],
+             mult_deps->deps[i]->idx_same_dependencies);
     }
 
     int non_mult_deps_count = c->secret_count + c->random_count;
@@ -461,6 +515,38 @@ void print_circuit(const Circuit* c) {
 
     printf("\nRefreshes: %d on input 1, %d on input 2, %d on output.\n\n",
            refresh_i1, refresh_i2, refresh_out);
+  }
+
+  if(deps->correction_outputs->length){
+    printf("Correction outputs:\n");
+    for(int i=0; i<deps->correction_outputs->length; i++){
+      printf("%d: %s, %d\n", i, deps->correction_outputs->correction_outputs_names[i], deps->correction_outputs->correction_outputs_deps[i]->length);
+      
+      for(int j=0; j<deps->correction_outputs->correction_outputs_deps[i]->length; j++){
+
+        printf(j == 0 ? " [ " : "    [ ");
+        for (int k = 0; k < c->secret_count; k++) {
+          printf("%d ", deps->correction_outputs->correction_outputs_deps[i]->content[j][k]);
+        }
+        printf(", ");
+        for (int k = c->deps->first_rand_idx; k < c->deps->first_rand_idx+c->random_count; k++) {
+          printf("%d ", deps->correction_outputs->correction_outputs_deps[i]->content[j][k]);
+        }
+        printf(", ");
+        for (int k = c->deps->first_mult_idx; k < c->deps->first_mult_idx+c->deps->mult_deps->length; k++) {
+          printf("%d ", deps->correction_outputs->correction_outputs_deps[i]->content[j][k]);
+        }
+        printf(", ");
+        for (int k = c->deps->first_correction_idx; k < c->deps->first_correction_idx+c->deps->correction_outputs->length; k++) {
+          printf("%d ", deps->correction_outputs->correction_outputs_deps[i]->content[j][k]);
+        }
+        printf(", %d", deps->correction_outputs->correction_outputs_deps[i]->content[j][c->deps->deps_size-1]);
+        printf(j == deps->correction_outputs->correction_outputs_deps[i]->length-1 ? "] " : "]\n");
+      }
+    
+      printf("\n");
+    }
+    printf("\n");
   }
 
 }

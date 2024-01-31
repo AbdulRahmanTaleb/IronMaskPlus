@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <assert.h>
+#include <inttypes.h>
 
 #include "IOS.h"
 #include "config.h"
@@ -73,7 +74,7 @@ int compute_IOS(Circuit* circuit, int cores, int t) {
   
   for (int size = 1; size <= t; size++) {
     printf("############################\n");
-    printf("Checking IOS ==> %'llu tuples of size %d to check...\n",
+    printf("Checking IOS ==> %"PRIu64" tuples of size %d to check...\n",
            n_choose_k(size, circuit->deps->length), size);
     has_failure = find_first_failure_freeSNI_IOS(circuit,
                                      cores,

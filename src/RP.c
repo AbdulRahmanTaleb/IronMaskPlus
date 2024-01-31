@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <math.h>
+#include <inttypes.h>
 
 #include "RP.h"
 #include "config.h"
@@ -83,14 +84,14 @@ void compute_RP_coeffs(Circuit* circuit, int cores, int coeff_max, int opt_incom
     // only elementary shares (which, because of the dimension
     // reduction, are never generated otherwise).
     if (size > 0) {
-      printf("%llu, ", coeffs[size]); fflush(stdout);
+      printf("%"PRIu64", ", coeffs[size]); fflush(stdout);
     }
   }
 
   for (int i = coeff_max_main_loop+1; i < dim_red_data->old_circuit->total_wires-1; i++) {
-    printf("%llu, ", coeffs[i]);
+    printf("%"PRIu64", ", coeffs[i]);
   }
-  printf("%llu ]\n", coeffs[circuit->total_wires]);
+  printf("%"PRIu64" ]\n", coeffs[circuit->total_wires]);
 
   double p_min = compute_leakage_proba(coeffs, coeff_max,
                                        circuit->total_wires+1,

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <assert.h>
 #include <time.h>
+#include <inttypes.h>
 
 #include "dimensions.h"
 #include "config.h"
@@ -640,7 +641,7 @@ void advanced_dimension_reduction(Circuit* circuit) {
   time(&end);
   uint64_t diff_time = (uint64_t)difftime(end, start);
 
-  printf("Advanced dimension reduction completed in %llu min %llu sec.\n",
+  printf("Advanced dimension reduction completed in %"PRIu64" min %"PRIu64" sec.\n",
          diff_time / 60, diff_time % 60);
   printf("old circuit: %d vars -- new circuit: %d vars.\n\n",
          deps->length, new_deps->length);
@@ -709,9 +710,7 @@ bool _is_elementary_multiplication(Circuit * circuit, MultDependency * mult_dep)
 
 bool is_elementary(Circuit* circuit, Dependency* dep) {
   DependencyList* deps    = circuit->deps;
-  int deps_size           = deps->deps_size;
   int first_rand_idx      = deps->first_rand_idx;
-  int has_input_rands     = circuit->has_input_rands;
   int non_mult_deps_count = circuit->secret_count + circuit->random_count;
 
   // make sure it does not contain any random values
@@ -768,6 +767,8 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
   DependencyList* new_deps = malloc(sizeof(*new_deps));
   new_deps->deps_size      = deps->deps_size;
   new_deps->first_rand_idx = deps->first_rand_idx;
+  new_deps->first_correction_idx = deps->first_correction_idx;
+  new_deps->first_mult_idx = deps->first_mult_idx;
   new_deps->length         = 0;
   new_deps->deps           = malloc(deps->length * sizeof(*new_deps->deps));
   new_deps->deps_exprs     = malloc(deps->length * sizeof(*new_deps->deps_exprs));
@@ -776,6 +777,7 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
   new_deps->bit_deps       = malloc(deps->length * sizeof(*new_deps->bit_deps));
 
   new_deps->mult_deps      = deps->mult_deps;
+  new_deps->correction_outputs = deps->correction_outputs;
 
   for (int i = 0; i < deps->length; i++) {
     Dependency* dep = deps->deps[i]->content[0];

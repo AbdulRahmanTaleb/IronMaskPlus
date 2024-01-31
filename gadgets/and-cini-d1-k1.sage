@@ -5,7 +5,7 @@
 #RANDOMS r0 r1 
 #OUT c 
 
-temp0 = 0 + b0_0
+temp0 = r0 + b0_0
 temp1 = r0 + b1_0
 temp2 = r0 + b0_1
 temp3 = r0 + b1_1
@@ -23,7 +23,7 @@ temp14 = ~temp2 #correction
 temp15 = ~temp3 #correction
 temp16 = ~temp3 #correction
 temp17 = ~temp3 #correction
-temp18 = temp4 * temp0  #correction
+temp18 = 1  #correction
 temp19 = ~temp4 #correction
 temp20 = temp4 * temp0  #correction
 temp21 = ~temp4 #correction

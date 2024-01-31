@@ -6,6 +6,7 @@
 #include <string.h> // For strcmp
 #include <time.h>   // For clock
 #include <locale.h> // For setlocale
+#include <inttypes.h>
 
 #include "circuit.h"
 #include "list_tuples.h"
@@ -23,6 +24,7 @@
 #include "RPE.h"
 #include "config.h"
 #include "constructive.h"
+#include "utils.h"
 
 #define GLITCH_OPT 1000
 #define TRANSITION_OPT 1001
@@ -70,7 +72,7 @@ int main(int argc, char** argv) {
   setlocale(LC_NUMERIC, "");
 
   int verbose = 0, coeff_max = -1, t = -1, t_output = -1, opt_incompr = 0, cores = 1;
-  bool glitch = false, transition = false, faults = false;
+  bool glitch = false, transition = false;
   char* property = NULL;
   char* filename = NULL;
 
@@ -103,7 +105,6 @@ int main(int argc, char** argv) {
       opt_incompr = 1;
       break;
     case 'f':
-      faults = 1;
       break;
     case 'v':
       if (!is_int(optarg)) {
@@ -215,8 +216,18 @@ int main(int argc, char** argv) {
     t_output = t;
   }
 
-  Circuit* circuit = parse_file(filename, glitch, transition);
+  ParsedFile * pf = parse_file(filename);
+
+  FaultedVar v1 = {"b0_0", true};
+  FaultedVar * v[1] = {&v1};
+  Faults * fv = malloc(sizeof(*fv));
+  fv->length = 1;
+  fv->vars = v;
+
+  Circuit* circuit = gen_circuit(pf, glitch, transition, fv);
   //print_circuit(circuit);
+
+  free_parsed_file(pf);
 
   printf("Gadget with %d input(s),  %d output(s),  %d share(s)\n"
          "Total number of intermediate variables : %d\n"
@@ -263,7 +274,7 @@ int main(int argc, char** argv) {
   time(&end);
   uint64_t diff_time = (uint64_t)difftime(end, start);
 
-  printf("\nVerification completed in %llu min %llu sec.\n",
+  printf("\nVerification completed in %" PRIu64 " min %" PRIu64 " sec.\n",
          diff_time / 60, diff_time % 60);
 
   free_circuit(circuit);
