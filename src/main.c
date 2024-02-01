@@ -219,12 +219,13 @@ int main(int argc, char** argv) {
   ParsedFile * pf = parse_file(filename);
 
   FaultedVar v1 = {"b0_0", true};
-  FaultedVar * v[1] = {&v1};
+  FaultedVar v2 = {"temp60", false};
+  FaultedVar * v[2] = {&v2, NULL};
   Faults * fv = malloc(sizeof(*fv));
-  fv->length = 1;
+  fv->length = 2;
   fv->vars = v;
 
-  Circuit* circuit = gen_circuit(pf, glitch, transition, fv);
+  Circuit* circuit = gen_circuit(pf, glitch, transition, NULL);
   //print_circuit(circuit);
 
   free_parsed_file(pf);

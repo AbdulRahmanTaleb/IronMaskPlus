@@ -1135,7 +1135,6 @@ int _verify_tuples(const Circuit* circuit, // The circuit
                    bit_rand_len, bit_mult_len, bit_correction_outputs_len, local_deps_len);
         set_gauss_rand(local_deps, gauss_rands, local_deps_len, bit_rand_len);
         local_deps_len++;
-        printf("%s\n", circuit->deps->names[curr_comb[0]]);
         replace_correction_outputs_in_dep(local_deps, local_deps_len - 1, gauss_rands, &local_deps_len, 
                                                bit_correction_outputs_len, bit_rand_len,
                                                bit_mult_len, deps->correction_outputs);

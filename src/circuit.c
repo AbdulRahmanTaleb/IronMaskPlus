@@ -475,7 +475,8 @@ void print_circuit(const Circuit* c) {
       for (int k = c->deps->first_mult_idx; k < c->deps->first_mult_idx+c->deps->mult_deps->length; k++) {
         printf("%d ", deps->deps[i]->content[j][k]);
       }
-      printf(", ");
+      if(c->deps->correction_outputs->length)
+        printf(", ");
       for (int k = c->deps->first_correction_idx; k < c->deps->first_correction_idx+c->deps->correction_outputs->length; k++) {
         printf("%d ", deps->deps[i]->content[j][k]);
       }
