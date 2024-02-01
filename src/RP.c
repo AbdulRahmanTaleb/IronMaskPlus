@@ -44,7 +44,7 @@ void compute_RP_coeffs(Circuit* circuit, int cores, int coeff_max, int opt_incom
     coeffs[i] = 0;
   }
 
-  DimRedData* dim_red_data = remove_elementary_wires(circuit);
+  DimRedData* dim_red_data = remove_elementary_wires(circuit, true);
   int coeff_max_main_loop = coeff_max == -1 ? circuit->length :
     coeff_max > circuit->length ? circuit->length : coeff_max;
 

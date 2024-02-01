@@ -936,7 +936,7 @@ uint64_t** compute_RPE_copy(Circuit* circuit, DimRedData* dim_red_data,
 
 void compute_RPE_coeffs(Circuit* circuit, int cores, int coeff_max, int t, int t_output) {
 
-  DimRedData* dim_red_data = remove_elementary_wires(circuit);
+  DimRedData* dim_red_data = remove_elementary_wires(circuit, true);
 
   uint64_t** coeffs_RPE1 = compute_RPE1(circuit, dim_red_data, cores, coeff_max, t, t_output);
   uint64_t** coeffs_RPE2 = compute_RPE2(circuit, dim_red_data, cores, coeff_max, t, true);

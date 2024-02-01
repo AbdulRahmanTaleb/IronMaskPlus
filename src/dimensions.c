@@ -753,7 +753,7 @@ bool is_elementary(Circuit* circuit, Dependency* dep) {
 // DimRedData structure is returned; this structure can then be used
 // to expand almost-failures with elementary deterministic probes to
 // obtain actual failures.
-DimRedData* remove_elementary_wires(Circuit* circuit) {
+DimRedData* remove_elementary_wires(Circuit* circuit, bool print) {
   DimRedData* data_ret = malloc(sizeof(*data_ret));
 
   data_ret->removed_wires = VarVector_make();
@@ -799,16 +799,18 @@ DimRedData* remove_elementary_wires(Circuit* circuit) {
   circuit->deps = new_deps;
   circuit->length = circuit->length - deps->length + new_deps->length;
 
-  printf("Dimension reduction: old circuit: %d vars -- new circuit: %d vars.\n\n",
-         deps->length, new_deps->length);
+  if(print){
+    printf("Dimension reduction: old circuit: %d vars -- new circuit: %d vars.\n\n",
+          deps->length, new_deps->length);
 
-  printf("Removed %d variables : {", data_ret->removed_wires->length);
-  for(int i=0; i<data_ret->removed_wires->length; i++){
-    int idx = data_ret->removed_wires->content[i];
+    printf("Removed %d variables : {", data_ret->removed_wires->length);
+    for(int i=0; i<data_ret->removed_wires->length; i++){
+      int idx = data_ret->removed_wires->content[i];
 
-    printf("%s ", data_ret->old_circuit->deps->names[idx]);
+      printf("%s ", data_ret->old_circuit->deps->names[idx]);
+    }
+    printf("}\n\n");
   }
-  printf("}\n\n");
 
   return data_ret;
 }

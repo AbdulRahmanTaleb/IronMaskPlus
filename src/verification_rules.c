@@ -1210,28 +1210,28 @@ int _verify_tuples(const Circuit* circuit, // The circuit
 
       // Factorizing tuple
 
-      for (int h = 0; h < local_deps_len; h++) {
-        printf("  [ %"PRId32" %"PRId32" | ",
-                  local_deps[h]->secrets[0], local_deps[h]->secrets[1]);
-        for (int k = 0; k < bit_rand_len; k++){
-          printf("%"PRId64" ", local_deps[h]->randoms[k]);
-        }
-        printf(" | "); 
-        if(circuit->contains_mults){
-          for (int k = 0; k < bit_mult_len; k++){
-            printf("%"PRId64" ", local_deps[h]->mults[k]);
-          }
-        } 
-        printf(" | "); 
-        for (int k = 0; k < bit_correction_outputs_len; k++){
-          printf("%" PRId64 " ", local_deps[h]->correction_outputs[k]);
-        }
-        printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
+      // for (int h = 0; h < local_deps_len; h++) {
+      //   printf("  [ %"PRId32" %"PRId32" | ",
+      //             local_deps[h]->secrets[0], local_deps[h]->secrets[1]);
+      //   for (int k = 0; k < bit_rand_len; k++){
+      //     printf("%"PRId64" ", local_deps[h]->randoms[k]);
+      //   }
+      //   printf(" | "); 
+      //   if(circuit->contains_mults){
+      //     for (int k = 0; k < bit_mult_len; k++){
+      //       printf("%"PRId64" ", local_deps[h]->mults[k]);
+      //     }
+      //   } 
+      //   printf(" | "); 
+      //   for (int k = 0; k < bit_correction_outputs_len; k++){
+      //     printf("%" PRId64 " ", local_deps[h]->correction_outputs[k]);
+      //   }
+      //   printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
       
-      }
-      printf("\n");
+      // }
+      // printf("\n");
 
-      printf("FACTORISING %s\n", circuit->deps->names[curr_comb[0]]);
+      // printf("FACTORISING %s\n", circuit->deps->names[curr_comb[0]]);
 
       int first_invalid_mult_index_in_local_deps_fact =
         tuple_to_local_deps_map[first_invalid_mult_index_fact];
@@ -1252,27 +1252,27 @@ int _verify_tuples(const Circuit* circuit, // The circuit
         factorize_mults(circuit, &local_deps[i], deps_fact,
                         &deps_length_fact, 1);
 
-        printf("BEFORE:\n");
-        for (int h = 0; h < deps_length_fact; h++) {
-          printf("  [ %"PRId32" %"PRId32" | ",
-                    deps_fact[h]->secrets[0], deps_fact[h]->secrets[1]);
-          for (int k = 0; k < bit_rand_len; k++){
-            printf("%"PRId64" ", deps_fact[h]->randoms[k]);
-          }
-          printf(" | "); 
-          if(circuit->contains_mults){
-            for (int k = 0; k < bit_mult_len; k++){
-              printf("%"PRId64" ", deps_fact[h]->mults[k]);
-            }
-          } 
-          printf(" | "); 
-          for (int k = 0; k < bit_correction_outputs_len; k++){
-            printf("%" PRId64 " ", deps_fact[h]->correction_outputs[k]);
-          }
-          printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
+        // printf("BEFORE:\n");
+        // for (int h = 0; h < deps_length_fact; h++) {
+        //   printf("  [ %"PRId32" %"PRId32" | ",
+        //             deps_fact[h]->secrets[0], deps_fact[h]->secrets[1]);
+        //   for (int k = 0; k < bit_rand_len; k++){
+        //     printf("%"PRId64" ", deps_fact[h]->randoms[k]);
+        //   }
+        //   printf(" | "); 
+        //   if(circuit->contains_mults){
+        //     for (int k = 0; k < bit_mult_len; k++){
+        //       printf("%"PRId64" ", deps_fact[h]->mults[k]);
+        //     }
+        //   } 
+        //   printf(" | "); 
+        //   for (int k = 0; k < bit_correction_outputs_len; k++){
+        //     printf("%" PRId64 " ", deps_fact[h]->correction_outputs[k]);
+        //   }
+        //   printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
         
-        }
-        printf("\n");
+        // }
+        // printf("\n");
 
         //printf("done factorizing, length=%d / %d\n",up_to_date_deps_length_fact, deps_length_fact);
 
@@ -1289,27 +1289,27 @@ int _verify_tuples(const Circuit* circuit, // The circuit
           //printf("next\n");
         }
 
-        printf("AFTER:\n");
-        for (int h = 0; h < deps_length_fact; h++) {
-          printf("  [ %"PRId32" %"PRId32" | ",
-                    deps_fact[h]->secrets[0], deps_fact[h]->secrets[1]);
-          for (int k = 0; k < bit_rand_len; k++){
-            printf("%"PRId64" ", deps_fact[h]->randoms[k]);
-          }
-          printf(" | "); 
-          if(circuit->contains_mults){
-            for (int k = 0; k < bit_mult_len; k++){
-              printf("%"PRId64" ", deps_fact[h]->mults[k]);
-            }
-          } 
-          printf(" | "); 
-          for (int k = 0; k < bit_correction_outputs_len; k++){
-            printf("%" PRId64 " ", deps_fact[h]->correction_outputs[k]);
-          }
-          printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
+        // printf("AFTER:\n");
+        // for (int h = 0; h < deps_length_fact; h++) {
+        //   printf("  [ %"PRId32" %"PRId32" | ",
+        //             deps_fact[h]->secrets[0], deps_fact[h]->secrets[1]);
+        //   for (int k = 0; k < bit_rand_len; k++){
+        //     printf("%"PRId64" ", deps_fact[h]->randoms[k]);
+        //   }
+        //   printf(" | "); 
+        //   if(circuit->contains_mults){
+        //     for (int k = 0; k < bit_mult_len; k++){
+        //       printf("%"PRId64" ", deps_fact[h]->mults[k]);
+        //     }
+        //   } 
+        //   printf(" | "); 
+        //   for (int k = 0; k < bit_correction_outputs_len; k++){
+        //     printf("%" PRId64 " ", deps_fact[h]->correction_outputs[k]);
+        //   }
+        //   printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
         
-        }
-        printf("\n");
+        // }
+        // printf("\n");
 
         up_to_date_deps_length_fact = deps_length_fact;
 

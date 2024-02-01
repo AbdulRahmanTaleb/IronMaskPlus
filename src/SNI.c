@@ -89,7 +89,7 @@ void compute_SNI_with_incompr(Circuit* circuit, int t) {
 
 
 void compute_SNI(Circuit* circuit, int cores, int t) {
-  DimRedData* dim_red_data = remove_elementary_wires(circuit);
+  DimRedData* dim_red_data = remove_elementary_wires(circuit, true);
   advanced_dimension_reduction(circuit);
 
   /* if (! circuit->contains_mults) { */

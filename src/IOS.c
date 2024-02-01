@@ -49,7 +49,7 @@ int compute_IOS(Circuit* circuit, int cores, int t) {
     return 0;
   }
 
-  DimRedData* dim_red_data = remove_elementary_wires(circuit);
+  DimRedData* dim_red_data = remove_elementary_wires(circuit, true);
   //advanced_dimension_reduction(circuit);
   struct callback_data data = { .ni_order = t };
 

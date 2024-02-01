@@ -146,12 +146,12 @@ void compute_rands_usage(Circuit* c) {
     if(out_rands[i]) cpt++;
     if(cpt > 1){
       fprintf(stderr, "compute_rands_usage(): Unsupported format for random '%d' in a multiplication gadget.\n", i- c->secret_count);
-      exit(EXIT_FAILURE);
+      //exit(EXIT_FAILURE);
     }
-    if(cpt == 0){
-      fprintf(stderr, "compute_rands_usage(): random '%d' not found in gadget.\n", i- c->secret_count);
-      exit(EXIT_FAILURE);
-    }
+    // if(cpt == 0){
+    //   fprintf(stderr, "compute_rands_usage(): random '%d' not found in gadget.\n", i- c->secret_count);
+    //   exit(EXIT_FAILURE);
+    // }
   }
 
   c->i1_rands        = i1_rands;
@@ -432,11 +432,12 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
           circuit->bit_i1_rands[i] |= 1ULL << j;
         } else if (circuit->i2_rands[idx]) {
           circuit->bit_i2_rands[i] |= 1ULL << j;
-        } else {
-          printf("Random %d (%s) is not in out_rands/i1_rands/i2_rands...\n",
-                idx, circuit->deps->names[idx]);
-          assert(false);
         }
+        // else {
+        //   printf("Random %d (%s) is not in out_rands/i1_rands/i2_rands...\n",
+        //         idx, circuit->deps->names[idx]);
+        //   assert(false);
+        // }
 
       }
     }

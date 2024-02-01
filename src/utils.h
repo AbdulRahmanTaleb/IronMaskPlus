@@ -159,6 +159,8 @@ typedef struct _parsed_file{
   StrMap* randoms;
   StrMap* out;
   EqList* eqs;
+  bool glitch;
+  bool transition;
 }ParsedFile;
 
 

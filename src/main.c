@@ -25,6 +25,7 @@
 #include "config.h"
 #include "constructive.h"
 #include "utils.h"
+#include "CNI.h"
 
 #define GLITCH_OPT 1000
 #define TRANSITION_OPT 1001
@@ -44,14 +45,15 @@ int is_int(char* s) {
 
 void usage() {
   printf("Usage:\n"
-         "    ironmask [OPTIONS] [NI|SNI|freeSNI|uniformSNI|IOS|PINI|RP|RPC|RPE] FILE\n"
-         "Computes the probing (NI, SNI, PINI) or random probing property (RP, RPC, RPE) for FILE\n\n"
+         "    ironmask [OPTIONS] [NI|SNI|freeSNI|uniformSNI|IOS|PINI|RP|RPC|RPE|CNI] FILE\n"
+         "Computes the probing (NI, SNI, PINI) or random probing property (RP, RPC, RPE) or the combined fault property (CNI) for FILE\n\n"
 
          "Options:\n"
          "    -v[num], --verbose[num]             Sets verbosity level.\n"
          "    -c[num], --coeff_max[num]           Sets the last precise coefficient to compute\n"
          "                                        for RP-like properties.\n"
          "    -t[num]                             Sets the t parameter for NI/SNI/PINI/RPC/RPE.\n"
+         "    -k[num]                             Sets the k parameter for CNI.\n"
          "                                        This option is mandatory except when checking RP.\n"
          "    -o[num], --t_output[num]            Sets the t_output parameter for RPC/RPE.\n"
          "    -j[num], --jobs[num]                Sets the number of core to use.\n"
@@ -71,7 +73,7 @@ int main(int argc, char** argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
   setlocale(LC_NUMERIC, "");
 
-  int verbose = 0, coeff_max = -1, t = -1, t_output = -1, opt_incompr = 0, cores = 1;
+  int verbose = 0, coeff_max = -1, t = -1, t_output = -1, opt_incompr = 0, cores = 1, k = -1;
   bool glitch = false, transition = false;
   char* property = NULL;
   char* filename = NULL;
@@ -82,17 +84,17 @@ int main(int argc, char** argv) {
       { "verbose",     required_argument, 0, 'v'            },
       { "coeff_max",   required_argument, 0, 'c'            },
       { "t",           required_argument, 0, 't'            },
+      { "k",           required_argument, 0, 'k'            },
       { "t_output",    required_argument, 0, 'o'            },
       { "jobs",        required_argument, 0, 'j'            },
       { "incompr-opt", no_argument,       0, 'i'            },
-      { "faults",      no_argument,       0, 'f'            },
       { "glitch",      no_argument,       0, GLITCH_OPT     },
       { "transition",  no_argument,       0, TRANSITION_OPT },
       { 0, 0, 0, 0}
     };
 
     int option_index = 0;
-    int c = getopt_long(argc, argv, "hc:v:t:o:j:i:f",
+    int c = getopt_long(argc, argv, "hc:v:t:k:o:j:i",
                         long_options, &option_index);
 
     if (c == -1) break;
@@ -133,6 +135,19 @@ int main(int argc, char** argv) {
         t = atoi(optarg);
       }
       break;
+    case 'k':
+      if (!is_int(optarg)) {
+        fprintf(stderr, "Option -k expects an integer. Provided: '%s'. Exiting.\n",
+                optarg);
+        exit(EXIT_FAILURE);
+      } else {
+        k = atoi(optarg);
+        if(k > 1){
+          fprintf(stderr, "Only at most a single fault is supported by the current implementation. Exiting.\n");
+          exit(EXIT_FAILURE);
+        }
+      }
+      break;
     case 'o':
       if (!is_int(optarg)) {
         fprintf(stderr, "Option --t_output expects an integer. Provided: '%s'. Exiting.\n",
@@ -170,7 +185,8 @@ int main(int argc, char** argv) {
         (strcmp(argv[optind], "PINI") == 0) ||
         (strcmp(argv[optind], "RP")   == 0) ||
         (strcmp(argv[optind], "RPC")  == 0) ||
-        (strcmp(argv[optind], "RPE")  == 0)) {
+        (strcmp(argv[optind], "RPE")  == 0) ||
+        (strcmp(argv[optind], "CNI") == 0)) {
       property = argv[optind];
     } else {
       if (filename) {
@@ -212,34 +228,40 @@ int main(int argc, char** argv) {
     usage();
   }
 
+  if (((strcmp(property, "CNI")   == 0)) &&
+      ((t == -1) || (k==-1))) {
+    fprintf(stderr, "When computing property %s, arguments -t T and -k K are mandatory. \n\n",
+            property);
+    usage();
+  }
+
   if (t != -1 && t_output == -1) {
     t_output = t;
   }
 
   ParsedFile * pf = parse_file(filename);
-
-  FaultedVar v1 = {"b0_0", true};
-  FaultedVar v2 = {"temp60", false};
-  FaultedVar * v[2] = {&v2, NULL};
-  Faults * fv = malloc(sizeof(*fv));
-  fv->length = 2;
-  fv->vars = v;
+  pf->glitch = glitch;
+  pf->transition = transition;
 
   Circuit* circuit = gen_circuit(pf, glitch, transition, NULL);
-  //print_circuit(circuit);
-
-  free_parsed_file(pf);
 
   printf("Gadget with %d input(s),  %d output(s),  %d share(s)\n"
          "Total number of intermediate variables : %d\n"
          "Total number of variables : %d\n"
-         "Total number of Wires : %d\n\n",
+         "Total number of Wires : %d\n",
          circuit->secret_count, circuit->output_count, circuit->share_count,
          circuit->length,
          circuit->deps->length,
          circuit->total_wires);
 
-  if (circuit->length + circuit->output_count * circuit->share_count > 255) {
+  if(pf->nb_duplications){
+    printf("Total number of duplications: %d\n\n", circuit->nb_duplications);
+  }
+  else{
+    printf("\n");
+  }
+
+  if (circuit->length + circuit->output_count * circuit->share_count * circuit->nb_duplications > 255) {
     if (sizeof(Var) < 2) {
       fprintf(stderr, "This circuit contains more than 255 variables, and cannot be processed by this version of IronMask as it was compiled. Change Comb to uint16_t instead of uint8_t, and recompile. Exiting.\n");
       exit(EXIT_FAILURE);
@@ -268,7 +290,9 @@ int main(int argc, char** argv) {
     compute_RPC_coeffs(circuit, cores, coeff_max, opt_incompr, t, t_output);
   } else if (strcmp(property, "RPE") == 0) {
     compute_RPE_coeffs(circuit, cores, coeff_max, t, t_output);
-  } else {
+  } else if (strcmp(property, "CNI") == 0) {
+    compute_CNI(pf, cores, t, k);
+  }else {
     fprintf(stderr, "Property %s not implemented. Exiting.\n", property);
     exit(EXIT_FAILURE);
   }
@@ -278,6 +302,7 @@ int main(int argc, char** argv) {
   printf("\nVerification completed in %" PRIu64 " min %" PRIu64 " sec.\n",
          diff_time / 60, diff_time % 60);
 
+  free_parsed_file(pf);
   free_circuit(circuit);
   return EXIT_SUCCESS;
 }

@@ -34,6 +34,6 @@ typedef struct _dim_red_data {
 
 
 void advanced_dimension_reduction(Circuit* circuit);
-DimRedData* remove_elementary_wires(Circuit* circuit);
+DimRedData* remove_elementary_wires(Circuit* circuit, bool print);
 void remove_randoms(Circuit* circuit);
 void free_dim_red_data(DimRedData* dim_red_data);
