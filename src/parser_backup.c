@@ -451,35 +451,6 @@ void update_same_dependencies_idx_last_mult(MultDependencyList * mult_deps,
 }
 
 
-void handle_faulted_correction_output(EqList* eqs, EqListElem* e,
-                                uint64_t * fault_idx, bool * faulted, int add_idx, int corr_output_idx,
-                                Dependency * dep, DependencyList* deps,
-                                Faults * fv, Dependency ** original_deps, int deps_size){
-
-  //printf("%s\n", e->dst);
-  bool fault_in_correction = false;
-  uint64_t f_idx = fault_idx[add_idx];
-  while (f_idx != 0) {
-    int fault_idx_in_elem = __builtin_ia32_lzcnt_u64(f_idx);
-    f_idx &= ~(1ULL << (63-fault_idx_in_elem));
-    int f_elem_idx = 63-fault_idx_in_elem;
-    EqListElem * eq = get_eq_list(eqs, fv->vars[f_elem_idx]->name);
-    if(eq && eq->correction && (!eq->correction_output)){
-      printf("%s DETECTED\n", e->dst);
-      fault_in_correction = true;
-      break;
-    }
-  }
-  if(!fault_in_correction){
-    faulted[add_idx] = false;
-    fault_idx[add_idx] = 0;
-    memcpy(dep, original_deps[add_idx], deps_size * sizeof(*dep));
-  }else{
-    dep[deps->first_correction_idx + corr_output_idx] = 1;
-  }
-}
-
-
 Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv) {
 
   StrMap* in = pf->in;
@@ -700,9 +671,8 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
                              fault_idx[str_map_get(positions_map, e->expr->right)];
       }
       else{
-        handle_faulted_correction_output(eqs, e, fault_idx, faulted, 
-                                         add_idx, corr_output_idx, dep, deps,
-                                         fv, original_deps, deps_size);
+        fprintf(stderr, "Unsupported format for addition correction output variable %s\n", e->dst);
+        exit(EXIT_FAILURE);
       }
     } 
     // Multiplication operation
@@ -868,9 +838,28 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
           }
 
           if(e->correction_output){
-            handle_faulted_correction_output(eqs, e, fault_idx, faulted, 
-                                             add_idx, corr_output_idx, dep, deps,
-                                             fv, original_deps, deps_size);
+            printf("%s\n", e->dst);
+            bool fault_in_correction = false;
+            uint64_t f_idx = fault_idx[add_idx];
+            while (f_idx != 0) {
+              int fault_idx_in_elem = __builtin_ia32_lzcnt_u64(f_idx);
+              f_idx &= ~(1ULL << (63-fault_idx_in_elem));
+              int f_elem_idx = 63-fault_idx_in_elem;
+              EqListElem * eq = get_eq_list(eqs, fv->vars[f_elem_idx]->name);
+              if(eq && eq->correction && (!eq->correction_output)){
+                printf("%s DETECTED\n", e->dst);
+                fault_in_correction = true;
+                break;
+              }
+            }
+            
+            if(!fault_in_correction){
+              faulted[add_idx] = false;
+              fault_idx[add_idx] = 0;
+              memcpy(dep, original_deps[add_idx], deps_size * sizeof(*dep));
+            }else{
+              dep[deps->first_correction_idx + corr_output_idx] = 1;
+            }
           }
         }
       }
