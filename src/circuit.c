@@ -12,8 +12,10 @@ void compute_total_wires(Circuit* c) {
   int total = 0;
   for (int i = 0; i < c->length; i++) {
     total += c->weights[i];
+    //printf("%s %d\n", c->deps->names[i] ,c->weights[i]);
   }
   c->total_wires = total;
+  //exit(EXIT_FAILURE);
 }
 
 

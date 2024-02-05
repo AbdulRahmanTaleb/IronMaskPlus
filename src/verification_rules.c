@@ -152,6 +152,7 @@ int expand_tuple_to_failure(const Circuit* c,
                             int max_len,  const DimRedData* dim_red_data,
                             void (failure_callback)(const Circuit*,Comb*, int, SecretDep*, void*),
                             void* data) {
+
   int* new_to_old_mapping = dim_red_data->new_to_old_mapping;
   VarVector* removed_wires = dim_red_data->removed_wires;
   Circuit* old_circuit = dim_red_data->old_circuit;
@@ -775,7 +776,7 @@ void factorize_mults(const Circuit* c, BitDep** local_deps,
         mult_elem &= ~(1ULL << (63-mult_idx_in_elem));
         int mult_idx = j * 64 + (63-mult_idx_in_elem);
         MultDependency* mult = deps->mult_deps->deps[mult_idx];
-        printf("mult = %s\n", mult->name);
+        //printf("mult = %s\n", mult->name);
         factorize_inner_mults(c, factorized_deps, mult);
       }
     }
@@ -1059,6 +1060,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
 
   if (comb_len == 0) {
     if (failure_callback && comb_free_space) {
+      //printf("here %d\n", max_len);
       Comb curr_comb[max_len];
       return expand_tuple_to_failure(circuit, t_in, shares_to_ignore,
                                      curr_comb, comb_len, leaky_inputs, secret_deps,

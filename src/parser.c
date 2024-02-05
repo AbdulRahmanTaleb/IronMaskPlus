@@ -1048,6 +1048,8 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
     if (!weights[i]) weights[i] = 1;
   }
 
+  weights[0] = weights[1] = 1;
+
   c->length          = deps->length - out->next_val * shares * nb_duplications;
   c->nb_duplications = nb_duplications;
   c->deps            = deps;

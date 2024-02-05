@@ -26,6 +26,7 @@
 #include "constructive.h"
 #include "utils.h"
 #include "CNI.h"
+#include "CRP.h"
 
 #define GLITCH_OPT 1000
 #define TRANSITION_OPT 1001
@@ -45,7 +46,7 @@ int is_int(char* s) {
 
 void usage() {
   printf("Usage:\n"
-         "    ironmask [OPTIONS] [NI|SNI|freeSNI|uniformSNI|IOS|PINI|RP|RPC|RPE|CNI] FILE\n"
+         "    ironmask [OPTIONS] [NI|SNI|freeSNI|uniformSNI|IOS|PINI|RP|RPC|RPE|CNI|CRP] FILE\n"
          "Computes the probing (NI, SNI, PINI) or random probing property (RP, RPC, RPE) or the combined fault property (CNI) for FILE\n\n"
 
          "Options:\n"
@@ -186,7 +187,8 @@ int main(int argc, char** argv) {
         (strcmp(argv[optind], "RP")   == 0) ||
         (strcmp(argv[optind], "RPC")  == 0) ||
         (strcmp(argv[optind], "RPE")  == 0) ||
-        (strcmp(argv[optind], "CNI") == 0)) {
+        (strcmp(argv[optind], "CNI") == 0)  ||
+        (strcmp(argv[optind], "CRP") == 0)) {
       property = argv[optind];
     } else {
       if (filename) {
@@ -231,6 +233,13 @@ int main(int argc, char** argv) {
   if (((strcmp(property, "CNI")   == 0)) &&
       ((t == -1) || (k==-1))) {
     fprintf(stderr, "When computing property %s, arguments -t T and -k K are mandatory. \n\n",
+            property);
+    usage();
+  }
+
+  if ((strcmp(property, "CRP")   == 0) &&
+      (k==-1)) {
+    fprintf(stderr, "When computing property %s, argument -k K are mandatory. \n\n",
             property);
     usage();
   }
@@ -292,7 +301,9 @@ int main(int argc, char** argv) {
     compute_RPE_coeffs(circuit, cores, coeff_max, t, t_output);
   } else if (strcmp(property, "CNI") == 0) {
     compute_CNI(pf, cores, t, k);
-  }else {
+  } else if (strcmp(property, "CRP") == 0) {
+    compute_CRP_coeffs(pf, cores, coeff_max, k);
+  } else {
     fprintf(stderr, "Property %s not implemented. Exiting.\n", property);
     exit(EXIT_FAILURE);
   }
