@@ -120,7 +120,6 @@ int compute_CNI(ParsedFile * pf, int cores, int t, int k) {
 
   Faults * fv = malloc(sizeof(*fv));
   fv->length = k;
-  assert(k==1);
   FaultedVar * v1 = malloc(sizeof(*v1));
   FaultedVar * v[1] = {v1};
   fv->vars = v;
@@ -130,16 +129,28 @@ int compute_CNI(ParsedFile * pf, int cores, int t, int k) {
   bool has_random = true;
   struct callback_data data = { .ni_order = t };
 
-  for(int i=0; i< length; i++){
+  for(int i=1; i<=k; i++){
 
-    printf("################ Cheking CNI with fault on %s...\n", names[i]);
+    fv->length = i;
 
-    for(int s = 0; s<2; s++){
+    Comb * comb = first_comb(i, 0);
+    do{
 
-      v1->name = names[i];
-      v1->set = s;
+      printf("################ Cheking CNI with faults on ");
+      for(int j=0; j<i; j++){
+        printf("%s, ", names[comb[j]]);
+      }
+      printf("...\n");
 
-      printf("------%s:\n", v1->set ? "set":"reset");
+      FaultedVar ** v = malloc(i * sizeof(*v));
+
+      for(int j=0; j<i; j++){
+        v[j] = malloc(sizeof(*v[j]));
+        v[j]->set = false;
+        v[j]->name = names[comb[j]];
+      }
+
+      fv->vars = v;
 
       Circuit * c = gen_circuit(pf, pf->glitch, pf->transition, fv);
       //print_circuit(c);
@@ -158,7 +169,7 @@ int compute_CNI(ParsedFile * pf, int cores, int t, int k) {
                                         dim_red_data,  // dim_red_data
                                         has_random, // has_random
                                         NULL,  // first_comb
-                                        true, // include_outputs
+                                        false, // include_outputs
                                         0,     // shares_to_ignore
                                         false, // PINI
                                         NULL,  // incompr_tuples
@@ -168,8 +179,18 @@ int compute_CNI(ParsedFile * pf, int cores, int t, int k) {
       }
 
       if (has_failure) {
-        printf("Gadget is not %d-CNI with fault %s.\n\n", t, names[i]);
+        print_circuit(c);
+        printf("Gadget is not %d-CNI with faults on ");
+        for(int j=0; j<i; j++){
+          printf("%s, ", names[comb[j]]);
+        }
+        printf("\n");
       }
+
+      for(int j=0; j<i; j++){
+        free(v[j]);
+      }
+      free(v);
 
       free_dim_red_data(dim_red_data);
       free_circuit(c);
@@ -180,12 +201,16 @@ int compute_CNI(ParsedFile * pf, int cores, int t, int k) {
         return has_failure;
       }
 
-    }
+      printf("################\n\n");
 
-    printf("################\n\n");
-    
+
+    }while(incr_comb_in_place(comb, i, length));
+
+    free(comb);
+  }
+
+  for(int i=0; i<length; i++){
     free(names[i]);
-    
   }
 
   free(names);

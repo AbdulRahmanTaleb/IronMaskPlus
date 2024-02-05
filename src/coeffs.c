@@ -241,3 +241,104 @@ double compute_leakage_proba(uint64_t* coeffs, int last_precise_coeff, int len,
 
   return (p_inf+p_sup)/2;
 }
+
+void get_failure_proba(uint64_t* coeffs, int len, double p){
+  mpf_t coeffs_max[len];
+
+  for (int i = 0; i < len; i++) {
+    mpf_init_set_ui(coeffs_max[i], coeffs[i]);
+  }
+
+  mpf_t fp;
+  mpf_init(fp);
+
+  for (int i = 1; i < len; i++) {
+    mpf_t tmp, tmp2;
+
+    mpf_init_set_d(tmp, p);
+    mpf_pow_ui(tmp, tmp, i);
+    
+    mpf_init_set_d(tmp2, 1.0-p);
+    mpf_pow_ui(tmp2, tmp2, len-i);
+
+    mpf_mul(tmp, tmp, coeffs_max[i]);
+    mpf_mul(tmp, tmp, tmp2);
+
+    mpf_add(fp, fp, tmp);
+
+    mpf_clear(tmp);
+  }
+
+  gmp_printf("result = %.10Ff\n", fp);
+
+  mpf_clear(fp);
+}
+
+
+
+void compute_combined_leakage_proba(uint64_t** coeffs, int nb_faulty, int len, double p, double f) {
+  mpf_t coeffs_mpf[len];
+
+  // Binary search to find leakage proba p
+  mpf_t fp;
+  mpf_init(fp);
+
+  for(int k=0; k<nb_faulty; k++){
+
+    for (int i = 0; i < len; i++) {
+      mpf_init_set_ui(coeffs_mpf[i], coeffs[k][i]);
+    }
+
+    mpf_t fp_tmp;
+    mpf_init(fp_tmp);
+
+    for (int i = 1; i < len; i++) {
+
+      mpf_t tmp, tmp2;
+
+      mpf_init_set_d(tmp, p);
+      mpf_init_set_d(tmp2, 1.0-p);
+
+      mpf_pow_ui(tmp, tmp, i);
+      mpf_pow_ui(tmp2, tmp2, len-i);
+
+      mpf_mul(tmp, tmp, coeffs_mpf[i]);
+      mpf_mul(tmp, tmp, tmp2);
+      mpf_add(fp_tmp, fp_tmp, tmp);
+
+      mpf_clear(tmp);
+      mpf_clear(tmp2);
+    }
+
+    gmp_printf("%.10Ff\n", fp_tmp);
+
+    mpf_t tmp, tmp2;
+    mpf_init_set_d(tmp, f);
+    mpf_init_set_d(tmp2, 1.0-f);
+    
+    mpf_pow_ui(tmp, tmp, k+1);
+    mpf_pow_ui(tmp2, tmp2, nb_faulty-k-1);
+
+    mpf_mul(fp_tmp, fp_tmp, tmp);
+    mpf_mul(fp_tmp, fp_tmp, tmp2);
+
+    mpf_clear(tmp);
+    mpf_clear(tmp2);
+
+
+    mpf_add(fp, fp, fp_tmp);
+
+    mpf_clear(fp_tmp);
+
+    for (int i = 0; i < len; i++) {
+      mpf_clear(coeffs_mpf[i]);
+    }
+  }
+
+  gmp_printf("result = %.10Ff\n", fp);
+
+  mpf_clear(fp);
+
+
+}
+

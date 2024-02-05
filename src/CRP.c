@@ -113,8 +113,8 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
   Circuit * c = gen_circuit(pf, pf->glitch, pf->transition, NULL);
   int total_wires = c->total_wires;
 
-  uint64_t ** coeffs = malloc(length * 2 * sizeof(*coeffs));
-  for(int i=0; i<length*2; i++){
+  uint64_t ** coeffs = malloc(length * sizeof(*coeffs));
+  for(int i=0; i<length; i++){
     coeffs[i] = calloc(c->total_wires+1, sizeof(*coeffs[i]));
   }
 
@@ -134,11 +134,13 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
   FaultedVar * v[1] = {v1};
   fv->vars = v;
 
+  //length = 10;
+
   for(int i=0; i< length; i++){
 
     printf("################ Cheking CRP with fault on %s...\n", names[i]);
 
-    for(int s = 0; s<2; s++){
+    for(int s = 1; s<2; s++){
 
       v1->name = names[i];
       v1->set = s;
@@ -150,7 +152,7 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
       DimRedData* dim_red_data = remove_elementary_wires(circuit, false);
 
       struct callback_data data = {
-        .coeffs = coeffs[i*2 + s],
+        .coeffs = coeffs[i],
       };
 
       // Computing coefficients
@@ -201,4 +203,6 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
 
   free(v1);
   free(fv);
+
+  compute_combined_leakage_proba(coeffs, length, total_wires+1, 0.01, 0.01);
 }

@@ -143,10 +143,10 @@ int main(int argc, char** argv) {
         exit(EXIT_FAILURE);
       } else {
         k = atoi(optarg);
-        if(k > 1){
-          fprintf(stderr, "Only at most a single fault is supported by the current implementation. Exiting.\n");
-          exit(EXIT_FAILURE);
-        }
+        // if(k > 1){
+        //   fprintf(stderr, "Only at most a single fault is supported by the current implementation. Exiting.\n");
+        //   exit(EXIT_FAILURE);
+        // }
       }
       break;
     case 'o':
@@ -253,6 +253,8 @@ int main(int argc, char** argv) {
   pf->transition = transition;
 
   Circuit* circuit = gen_circuit(pf, glitch, transition, NULL);
+
+  //print_circuit(circuit);
 
   printf("Gadget with %d input(s),  %d output(s),  %d share(s)\n"
          "Total number of intermediate variables : %d\n"
