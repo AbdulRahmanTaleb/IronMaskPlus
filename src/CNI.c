@@ -17,6 +17,7 @@
 
 struct callback_data {
   int ni_order;
+  int faults;
 };
 
 static int generate_names(ParsedFile * pf, char *** names_ptr){
@@ -93,8 +94,8 @@ static void display_failure(const Circuit* c, Comb* comb, int comb_len, SecretDe
 
   struct callback_data* data = (struct callback_data*) data_void;
 
-  printf("Gadget is not %d-NI. Example of leaky tuple of size %d:\n",
-         data->ni_order, comb_len);
+  printf("Gadget is not (%d,%d)-CNI. Example of leaky tuple of size %d:\n",
+         data->ni_order, data->faults, comb_len);
   printf("  [ ");
   for (int i = 0; i < comb_len; i++) {
     printf("%d ", comb[i]);
@@ -120,14 +121,11 @@ int compute_CNI(ParsedFile * pf, int cores, int t, int k) {
 
   Faults * fv = malloc(sizeof(*fv));
   fv->length = k;
-  FaultedVar * v1 = malloc(sizeof(*v1));
-  FaultedVar * v[1] = {v1};
-  fv->vars = v;
 
   int has_failure = 0;
 
   bool has_random = true;
-  struct callback_data data = { .ni_order = t };
+  struct callback_data data = { .ni_order = t, .faults = k };
 
   for(int i=1; i<=k; i++){
 
@@ -180,7 +178,7 @@ int compute_CNI(ParsedFile * pf, int cores, int t, int k) {
 
       if (has_failure) {
         print_circuit(c);
-        printf("Gadget is not %d-CNI with faults on ");
+        printf("Gadget is not (%d,%d)-CNI with faults on ", data.ni_order, data.faults);
         for(int j=0; j<i; j++){
           printf("%s, ", names[comb[j]]);
         }
@@ -215,8 +213,11 @@ int compute_CNI(ParsedFile * pf, int cores, int t, int k) {
 
   free(names);
 
-  free(v1);
   free(fv);
+
+  if(!has_failure){
+    printf("Gadget is (%d,%d)-CNI\n", data.ni_order, data.faults);
+  }
   
 
   return !has_failure;

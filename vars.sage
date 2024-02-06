@@ -21,3 +21,12 @@ print(v1)
 print(v2)
 
 print(v3)
+
+
+f = 0.01
+val = 0.05
+
+res = 0
+for i in range(1,168):
+    res = res + val * (f) * ((1-f) ** (167))
+print(res)

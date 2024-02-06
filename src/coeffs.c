@@ -269,76 +269,60 @@ void get_failure_proba(uint64_t* coeffs, int len, double p){
     mpf_clear(tmp);
   }
 
-  gmp_printf("result = %.10Ff\n", fp);
+  gmp_printf("f(%.2lf) = %.10Ff\n", p, fp);
 
   mpf_clear(fp);
 }
 
 
+void compute_combined_intermediate_leakage_proba(uint64_t* coeffs, int k, int total, int coeffs_size, double p, double f, mpf_t res){
+  mpf_t coeffs_mpf[coeffs_size];
 
-void compute_combined_leakage_proba(uint64_t** coeffs, int nb_faulty, int len, double p, double f) {
-  mpf_t coeffs_mpf[len];
+  for (int i = 0; i < coeffs_size; i++) {
+    mpf_init_set_ui(coeffs_mpf[i], coeffs[i]);
+  }
 
-  // Binary search to find leakage proba p
-  mpf_t fp;
-  mpf_init(fp);
+  mpf_t fp_tmp;
+  mpf_init(fp_tmp);
 
-  for(int k=0; k<nb_faulty; k++){
-
-    for (int i = 0; i < len; i++) {
-      mpf_init_set_ui(coeffs_mpf[i], coeffs[k][i]);
-    }
-
-    mpf_t fp_tmp;
-    mpf_init(fp_tmp);
-
-    for (int i = 1; i < len; i++) {
-
-      mpf_t tmp, tmp2;
-
-      mpf_init_set_d(tmp, p);
-      mpf_init_set_d(tmp2, 1.0-p);
-
-      mpf_pow_ui(tmp, tmp, i);
-      mpf_pow_ui(tmp2, tmp2, len-i);
-
-      mpf_mul(tmp, tmp, coeffs_mpf[i]);
-      mpf_mul(tmp, tmp, tmp2);
-      mpf_add(fp_tmp, fp_tmp, tmp);
-
-      mpf_clear(tmp);
-      mpf_clear(tmp2);
-    }
-
-    gmp_printf("%.10Ff\n", fp_tmp);
+  for (int i = 1; i < coeffs_size; i++) {
 
     mpf_t tmp, tmp2;
-    mpf_init_set_d(tmp, f);
-    mpf_init_set_d(tmp2, 1.0-f);
-    
-    mpf_pow_ui(tmp, tmp, k+1);
-    mpf_pow_ui(tmp2, tmp2, nb_faulty-k-1);
 
-    mpf_mul(fp_tmp, fp_tmp, tmp);
-    mpf_mul(fp_tmp, fp_tmp, tmp2);
+    mpf_init_set_d(tmp, p);
+    mpf_pow_ui(tmp, tmp, i);
+
+    mpf_init_set_d(tmp2, 1.0-p);
+    mpf_pow_ui(tmp2, tmp2, coeffs_size-i);
+
+    mpf_mul(tmp, tmp, coeffs_mpf[i]);
+    mpf_mul(tmp, tmp, tmp2);
+
+
+    mpf_add(fp_tmp, fp_tmp, tmp);
 
     mpf_clear(tmp);
     mpf_clear(tmp2);
-
-
-    mpf_add(fp, fp, fp_tmp);
-
-    mpf_clear(fp_tmp);
-
-    for (int i = 0; i < len; i++) {
-      mpf_clear(coeffs_mpf[i]);
-    }
   }
 
-  gmp_printf("result = %.10Ff\n", fp);
+  mpf_t tmp, tmp2;
 
-  mpf_clear(fp);
+  mpf_init_set_d(tmp, f);
+  mpf_pow_ui(tmp, tmp, k);
+
+  mpf_init_set_d(tmp2, 1.0-f);
+  mpf_pow_ui(tmp2, tmp2, total-k);
+
+  mpf_mul(fp_tmp, fp_tmp, tmp);
+  mpf_mul(fp_tmp, fp_tmp, tmp2);
+
+  mpf_clear(tmp);
+  mpf_clear(tmp2);
+
+  //gmp_printf("%.10Ff, ", fp_tmp);
 
 
+  mpf_add(res, res, fp_tmp);
+
+  gmp_printf("acc result = %.6Ff\n", res);
 }
-

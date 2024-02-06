@@ -168,6 +168,10 @@ int expand_tuple_to_failure(const Circuit* c,
     return 1;
   }
 
+  // failure_callback(old_circuit, curr_comb_fixed, comb_len,
+  //                    leaky_inputs, data);
+  // return 1;
+
   /* printf("Failure basis: [ "); */
   /* for (int i = 0; i < comb_len; i++) printf("%d ", curr_comb_fixed[i]); */
   /* printf("]\n"); */
@@ -1366,6 +1370,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
         } else {
           failure_callback(circuit, curr_comb, comb_len, leaky_inputs, data);
         }
+        // failure_callback(circuit, curr_comb, comb_len, leaky_inputs, data);
       }
     }
     if (incompr_tuples) {

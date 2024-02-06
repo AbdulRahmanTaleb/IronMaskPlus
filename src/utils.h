@@ -148,7 +148,7 @@ DepMapElem* dep_map_get(DepMap* map, char* dep);
 DepMapElem* dep_map_get_nofail(DepMap* map, char* dep);
 char* dep_get_from_expr_nofail(DependencyList* deps, int length, Dependency* dep, DepArrVector* dep_arr, int deps_size);
 void free_dep_map(DepMap* map);
-// void print_dep_map(DepMap* map, int deps_size);
+void print_dep_map(DepMap* map, int deps_size);
 
 
 

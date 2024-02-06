@@ -387,16 +387,16 @@ void free_dep_map(DepMap* map) {
   free(map);
 }
 
-/* void print_dep_map(DepMap* map, int deps_size) { */
-/*   printf("%s: {",map->name); */
-/*   DepMapElem* e = map->head; */
-/*   while (e) { */
-/*     printf("  %s: [ ",e->key); */
-/*     for (int i = 0; i < deps_size; i++) { */
-/*       printf("%d ", e->val[i]); */
-/*     } */
-/*     printf("]\n"); */
-/*     e = e->next; */
-/*   } */
-/*   printf("}\n"); */
-/* } */
+void print_dep_map(DepMap* map, int deps_size) {
+  printf("%s: {",map->name); 
+  DepMapElem* e = map->head; 
+  while (e) { 
+    printf("  %s: [ ",e->key); 
+    for (int i = 0; i < deps_size; i++) { 
+      printf("%d ", e->std_dep[i]); 
+    } 
+    printf("]\n"); 
+    e = e->next; 
+  } 
+  printf("}\n"); 
+} 

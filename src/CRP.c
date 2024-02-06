@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <gmp.h>
 
 #include "NI.h"
 #include "config.h"
@@ -113,11 +114,6 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
   Circuit * c = gen_circuit(pf, pf->glitch, pf->transition, NULL);
   int total_wires = c->total_wires;
 
-  uint64_t ** coeffs = malloc(length * sizeof(*coeffs));
-  for(int i=0; i<length; i++){
-    coeffs[i] = calloc(c->total_wires+1, sizeof(*coeffs[i]));
-  }
-
   int coeff_max_main_loop = (coeff_max == -1) ? (c->length) :
     (coeff_max > c->length ? c->length : coeff_max);
 
@@ -129,30 +125,43 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
 
   Faults * fv = malloc(sizeof(*fv));
   fv->length = k;
-  assert(k==1);
-  FaultedVar * v1 = malloc(sizeof(*v1));
-  FaultedVar * v[1] = {v1};
-  fv->vars = v;
 
   //length = 10;
+  mpf_t res;
+  mpf_init(res);
 
-  for(int i=0; i< length; i++){
+  int cpt = 0;
+  for(int i=1; i<=k; i++){
 
-    printf("################ Cheking CRP with fault on %s...\n", names[i]);
+    fv->length = i;
 
-    for(int s = 1; s<2; s++){
+    Comb * comb = first_comb(i, 0);
+    do{
 
-      v1->name = names[i];
-      v1->set = s;
+      printf("################ Cheking CNI with faults on ");
+      for(int j=0; j<i; j++){
+        printf("%s, ", names[comb[j]]);
+      }
+      printf("...\n");
 
-      //printf("------%s:\n", v1->set ? "set":"reset");
+      FaultedVar ** v = malloc(i * sizeof(*v));
+
+      for(int j=0; j<i; j++){
+        v[j] = malloc(sizeof(*v[j]));
+        v[j]->set = true;
+        v[j]->name = names[comb[j]];
+      }
+
+      fv->vars = v;
+
+      uint64_t * coeffs = calloc(c->total_wires+1, sizeof(*coeffs));
 
       Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, fv);
-      //print_circuit(c);
+      // print_circuit(c);
       DimRedData* dim_red_data = remove_elementary_wires(circuit, false);
 
       struct callback_data data = {
-        .coeffs = coeffs[i],
+        .coeffs = coeffs,
       };
 
       // Computing coefficients
@@ -183,6 +192,10 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
         //   printf("%"PRIu64", ", coeffs[i*2 + s][size]); fflush(stdout);
         // }
       }
+      cpt++;
+
+      get_failure_proba(coeffs, total_wires+1, 0.01);
+      compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, 0.01, 0.01, res);
 
       // for (int k = coeff_max_main_loop+1; k < total_wires-1; k++) {
       //   printf("%"PRIu64", ", coeffs[i*2 + s][k]);
@@ -190,19 +203,21 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
       // printf("%"PRIu64" ]\n", coeffs[i*2 + s][circuit->total_wires]);
 
       free_circuit(c);
+      free(coeffs);
 
-    }
+    }while(incr_comb_in_place(comb, i, length));
 
-    //printf("################\n\n");
-    
+    free(comb);
+  }
+
+  for(int i=0; i<length; i++){
     free(names[i]);
-    
   }
 
   free(names);
 
-  free(v1);
   free(fv);
 
-  compute_combined_leakage_proba(coeffs, length, total_wires+1, 0.01, 0.01);
+  gmp_printf("\n\nf(%.2lf, %.2lf) = %.10Ff for a total of %d faulty scenarios\n", 0.01, 0.01, res, cpt);
+  mpf_clear(res);
 }

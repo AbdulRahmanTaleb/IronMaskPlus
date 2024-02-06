@@ -455,7 +455,7 @@ void update_same_dependencies_idx_last_mult(MultDependencyList * mult_deps,
 }
 
 
-void handle_faulted_correction_output(EqList* eqs, EqListElem* e,
+void handle_faulted_correction_output(EqList* eqs,
                                 uint64_t * fault_idx, bool * split, int add_idx, int corr_output_idx,
                                 Dependency * dep, DependencyList* deps,
                                 Faults * fv, Dependency ** original_deps, int deps_size){
@@ -484,6 +484,27 @@ void handle_faulted_correction_output(EqList* eqs, EqListElem* e,
     memset(dep, 0, deps_size*sizeof(*dep));
     dep[deps->first_correction_idx + corr_output_idx] = 1;
   }
+}
+
+inline void add_elem_dep(char * name, int dep_idx, Dependency d,
+                          int deps_size, int add_idx, DepMap* deps_map,
+                          StrMap* positions_map, bool * split,
+                          Dependency ** original_deps, DependencyList* deps){
+
+  Dependency* dep = calloc(deps_size, sizeof(*dep));
+  dep[dep_idx] = d;
+  DepArrVector* dep_arr = DepArrVector_make();
+  DepArrVector_push(dep_arr, dep);
+  
+  deps->deps[add_idx]       = dep_arr;
+  deps->deps_exprs[add_idx] = dep;
+  deps->names[add_idx]      = strdup(name);
+
+  memcpy(original_deps[add_idx], dep, deps_size*sizeof(*dep));
+
+  dep_map_add(deps_map, strdup(name), dep, dep_arr, original_deps[add_idx]);
+  str_map_add(positions_map, strdup(name));
+  split[add_idx] = false;
 }
 
 
@@ -542,8 +563,7 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
   deps->correction_outputs = correction_outputs;
 
   bool * split = malloc(deps->length * sizeof(*split));
-  uint64_t * fault_idx = malloc(deps->length * sizeof(*fault_idx));
-  memset(fault_idx, 0, deps->length * sizeof(*fault_idx));
+  uint64_t * fault_idx = calloc(deps->length, sizeof(*fault_idx));
 
   OriginalDeps * orig_deps_struct = init_original_deps(deps->length, mult_count, deps_size);
   Dependency ** original_deps = orig_deps_struct->original_deps;
@@ -563,95 +583,39 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
     Dependency* dep = calloc(deps_size, sizeof(*dep));
     dep[deps_size-1] = i;
     DepArrVector* dep_arr = DepArrVector_make();
-
-    // deps->deps[add_idx]       = dep_arr;
-    // deps->deps_exprs[add_idx] = dep;
-    // deps->names[add_idx]      = strdup(name);
-
-    // memcpy(original_deps[add_idx], dep, deps_size*sizeof(*dep));
-
     dep_map_add(deps_map, name, dep, dep_arr, dep);
-    // str_map_add(positions_map, strdup(name));
-
-    // faulted[add_idx] = false;
-
-    // add_idx += 1;
   }
 
   // Initializing dependencies with inputs
-  if(nb_duplications <= 1){
-    for (StrMapElem* e = in->head; e != NULL; e = e->next, dep_bit_idx++) {
-      int len = strlen(e->key) + 1 + 2; // +1 for '\0' and +2 for share number
-      for (int i = 0; i < shares; i++) {
+  for (StrMapElem* e = in->head; e != NULL; e = e->next, dep_bit_idx++) {
+    int len = strlen(e->key) + 1 + 2 + (nb_duplications <= 1 ? 0 : 3);  // +1 for '\0' and +2 for share number and +1 for "_" and +2 for dup number
+    for (int i = 0; i < shares; i++) {
+      if(nb_duplications <= 1){
         char* name = malloc(len * sizeof(*name));
         snprintf(name, len, "%s%d", e->key, i);
-        Dependency* dep = calloc(deps_size, sizeof(*dep));
-        dep[dep_bit_idx] = 1 << i;
-        DepArrVector* dep_arr = DepArrVector_make();
-        DepArrVector_push(dep_arr, dep);
-        deps->deps[add_idx]       = dep_arr;
-        deps->deps_exprs[add_idx] = dep;
-        deps->names[add_idx]      = strdup(name);
-
-        memcpy(original_deps[add_idx], dep, deps_size*sizeof(*dep));
-
-        dep_map_add(deps_map, name, dep, dep_arr, original_deps[add_idx]);
-        str_map_add(positions_map, strdup(name));
-        split[add_idx] = false;
+        add_elem_dep(name, dep_bit_idx, 1 << i, deps_size, add_idx, deps_map, positions_map, split, original_deps, deps);
         add_idx += 1;
+        free(name);
       }
-    }
-  }
-  else{
-    for (StrMapElem* e = in->head; e != NULL; e = e->next, dep_bit_idx++) {
-      int len = strlen(e->key) + 1 + 2 + 1 + 2; // +1 for '\0' and +2 for share number and +1 for "_" and +2 for dup number
-      for (int i = 0; i < shares; i++) {
-
+      else{
         for(int j=0; j< nb_duplications; j++){
-
-          Dependency* dep = calloc(deps_size, sizeof(*dep));
-          dep[dep_bit_idx] = 1 << i;
-          DepArrVector* dep_arr = DepArrVector_make();
-          DepArrVector_push(dep_arr, dep);
-
           char* name = malloc(len * sizeof(*name));
           snprintf(name, len, "%s%d_%d", e->key, i, j);
-          
-          deps->deps[add_idx]       = dep_arr;
-          deps->deps_exprs[add_idx] = dep;
-          deps->names[add_idx]      = strdup(name);
-
-          memcpy(original_deps[add_idx], dep, deps_size*sizeof(*dep));
-
-          dep_map_add(deps_map, name, dep, dep_arr, original_deps[add_idx]);
-          str_map_add(positions_map, strdup(name));
-          split[add_idx] = false;
+          add_elem_dep(name, dep_bit_idx, 1 << i, deps_size, add_idx, deps_map, positions_map, split, original_deps, deps);
           add_idx += 1;
+          free(name);
         }
       }
     }
   }
-  
+
   // Initializing random dependencies
   for (StrMapElem* e = randoms->head; e != NULL; e = e->next, dep_bit_idx++, add_idx++) {
-    Dependency* dep = calloc(deps_size, sizeof(*dep));
-    dep[dep_bit_idx] = 1;
-    DepArrVector* dep_arr = DepArrVector_make();
-    DepArrVector_push(dep_arr, dep);
-    deps->deps[add_idx]       = dep_arr;
-    deps->deps_exprs[add_idx] = dep;
-    deps->names[add_idx]      = strdup(e->key);
-
-    memcpy(original_deps[add_idx], dep, deps_size*sizeof(*dep));
-
-    dep_map_add(deps_map, strdup(e->key), dep, dep_arr, original_deps[add_idx]);
-    str_map_add(positions_map, strdup(e->key));
-    split[add_idx] = false;
+    add_elem_dep(e->key, dep_bit_idx, 1, deps_size, add_idx, deps_map, positions_map, split, original_deps, deps);
   }
 
   if(fv){
     for(int i=0; i<fv->length; i++){
-      if(!fv->vars[i]) continue;
       if(str_map_contains(positions_map, fv->vars[i]->name)){
         int idx = str_map_get(positions_map, fv->vars[i]->name);
         memset(deps->deps_exprs[idx], 0, deps_size * sizeof(*deps->deps_exprs[idx]));
@@ -685,7 +649,6 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
       split[add_idx] = split[add_idx] || split[str_pos_right];
       fault_idx[add_idx] = fault_idx[add_idx] | fault_idx[str_pos_right];
     }
-
 
     if(!e->correction){
       if(e->expr->op == Asgn){
@@ -727,8 +690,9 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
         }
 
         temporary_mult_idx[mult_idx] = malloc(2 * sizeof(*temporary_mult_idx[mult_idx]));
-        temporary_mult_idx[mult_idx][0] = str_map_get(positions_map, e->expr->left);
-        temporary_mult_idx[mult_idx][1] = str_map_get(positions_map, e->expr->right);
+        assert((str_pos_left != -1) && (str_pos_right != -1));
+        temporary_mult_idx[mult_idx][0] = str_pos_left;
+        temporary_mult_idx[mult_idx][1] = str_pos_right;
 
         mult_idx++;
 
@@ -736,21 +700,17 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
 
         if(is_dep_constant(left->std_dep, deps_size)){
           if(left->std_dep[deps_size-1]){
-            split[add_idx] = split[str_map_get(positions_map, right->key)];
-            fault_idx[add_idx] = fault_idx[str_map_get(positions_map, right->key)];;
+            split[add_idx] = split[str_pos_right];
           }
           else{
-            memset(dep, 0, deps_size * sizeof(*dep));
             split[add_idx] = false;
           }
         }
         else if(is_dep_constant(right->std_dep, deps_size)){
           if(right->std_dep[deps_size-1]){
-            split[add_idx] = split[str_map_get(positions_map, left->key)];
-            fault_idx[add_idx] = fault_idx[str_map_get(positions_map, left->key)];;
+            split[add_idx] = split[str_pos_left];
           }
           else{
-            memset(dep, 0, deps_size * sizeof(*dep));
             split[add_idx] = false;
           }
         }    
@@ -772,7 +732,7 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
           original_deps[add_idx][i] = left->original_dep[i] ^ right->original_dep[i];
         }
         if(e->correction_output){
-          handle_faulted_correction_output(eqs, e, fault_idx, split, 
+          handle_faulted_correction_output(eqs, fault_idx, split, 
                                          add_idx, corr_output_idx, dep, deps,
                                          fv, original_deps, deps_size);
         }
@@ -808,8 +768,7 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
           else if(is_dep_constant(left->std_dep, deps_size)){
             if(left->std_dep[deps_size-1]){
               memcpy(dep, right->std_dep, deps_size * sizeof(*dep));
-              split[add_idx] = split[str_map_get(positions_map, right->key)];
-              fault_idx[add_idx] = fault_idx[str_map_get(positions_map, right->key)];
+              split[add_idx] = split[str_pos_right];
             }
             else{
               memset(dep, 0, deps_size * sizeof(*dep));
@@ -819,8 +778,7 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
           else if(is_dep_constant(right->std_dep, deps_size)){
             if(right->std_dep[deps_size-1]){
               memcpy(dep, left->std_dep, deps_size * sizeof(*dep));
-              split[add_idx] = split[str_map_get(positions_map, left->key)];
-              fault_idx[add_idx] = fault_idx[str_map_get(positions_map, left->key)];;
+              split[add_idx] = split[str_pos_left];
             }
             else{
               memset(dep, 0, deps_size * sizeof(*dep));
@@ -830,7 +788,7 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
         }
         
         if(e->correction_output){
-          handle_faulted_correction_output(eqs, e, fault_idx, split, 
+          handle_faulted_correction_output(eqs, fault_idx, split, 
                                             add_idx, corr_output_idx, dep, deps,
                                             fv, original_deps, deps_size);
         }
@@ -904,7 +862,6 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
 
     if(fv){
       for(int i=0; i<fv->length; i++){
-        if(!fv->vars[i]) continue;
         if(strcmp(e->dst, fv->vars[i]->name) == 0){
           memset(dep, 0, deps_size * sizeof(*dep));
           dep[deps_size-1] = fv->vars[i]->set;
@@ -1009,6 +966,7 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
   // Updating weights of outputs that were not used after being
   // computed (and whose weight is thus still 0)
   for (int i = 0; i < add_idx; i++) {
+    weights[i] = 1;
     if (!weights[i]) weights[i] = 1;
   }
 
