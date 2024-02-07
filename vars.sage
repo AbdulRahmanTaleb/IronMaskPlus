@@ -30,10 +30,13 @@ res = 0
 for i in range(1,168):
     res = res + val * (f) * ((1-f) ** (167))
 
-for i in range(1,168):
-    for j in range(i, 168):
-        res = res + val * (f**2) * ((1-f) ** (166))
-print(res)
+#for i in range(1,168):
+#    for j in range(i, 168):
+#        res = res + val * (f**2) * ((1-f) ** (166))
+#print(res)
 
-mu = 1.561251e-02
-print(res * (1/(1-mu)))
+#mu = 1.561251e-02
+#print(res * (1/(1-mu)))
+p = 0.01
+print(3333 * (p**2) * ((1-p)**168))
+print(9999 * (p**2) * ((1-p)**400))

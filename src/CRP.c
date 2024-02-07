@@ -189,7 +189,7 @@ void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
         // only elementary shares (which, because of the dimension
         // reduction, are never generated otherwise).
         // if (size > 0) {
-        //   printf("%"PRIu64", ", coeffs[i*2 + s][size]); fflush(stdout);
+        //   printf("%"PRIu64", ", coeffs[size]); fflush(stdout);
         // }
       }
       cpt++;
@@ -198,9 +198,9 @@ void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
       compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, 0.01, 0.01, res);
 
       // for (int k = coeff_max_main_loop+1; k < total_wires-1; k++) {
-      //   printf("%"PRIu64", ", coeffs[i*2 + s][k]);
+      //   printf("%"PRIu64", ", coeffs[k]);
       // }
-      // printf("%"PRIu64" ]\n", coeffs[i*2 + s][circuit->total_wires]);
+      // printf("%"PRIu64" ]\n", coeffs[circuit->total_wires]);
 
       free_circuit(circuit);
       free(coeffs);
@@ -218,7 +218,7 @@ void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
 
   // add non faulty circuit
   uint64_t * coeffs = calloc(c->total_wires+1, sizeof(*coeffs));
-  Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, fv);
+  Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, NULL);
   // print_circuit(c);
   DimRedData* dim_red_data = remove_elementary_wires(circuit, false);
 
