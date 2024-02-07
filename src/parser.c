@@ -966,7 +966,7 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
   // Updating weights of outputs that were not used after being
   // computed (and whose weight is thus still 0)
   for (int i = 0; i < add_idx; i++) {
-    weights[i] = 1;
+    //weights[i] = 1;
     if (!weights[i]) weights[i] = 1;
   }
 

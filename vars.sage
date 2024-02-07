@@ -24,9 +24,16 @@ print(v3)
 
 
 f = 0.01
-val = 0.05
+val = 0.13
 
 res = 0
 for i in range(1,168):
     res = res + val * (f) * ((1-f) ** (167))
+
+for i in range(1,168):
+    for j in range(i, 168):
+        res = res + val * (f**2) * ((1-f) ** (166))
 print(res)
+
+mu = 1.561251e-02
+print(res * (1/(1-mu)))

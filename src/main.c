@@ -27,6 +27,7 @@
 #include "utils.h"
 #include "CNI.h"
 #include "CRP.h"
+#include "CRPC.h"
 
 #define GLITCH_OPT 1000
 #define TRANSITION_OPT 1001
@@ -46,14 +47,14 @@ int is_int(char* s) {
 
 void usage() {
   printf("Usage:\n"
-         "    ironmask [OPTIONS] [NI|SNI|freeSNI|uniformSNI|IOS|PINI|RP|RPC|RPE|CNI|CRP] FILE\n"
+         "    ironmask [OPTIONS] [NI|SNI|freeSNI|uniformSNI|IOS|PINI|RP|RPC|RPE|CNI|CRP|CRPC] FILE\n"
          "Computes the probing (NI, SNI, PINI) or random probing property (RP, RPC, RPE) or the combined fault property (CNI) for FILE\n\n"
 
          "Options:\n"
          "    -v[num], --verbose[num]             Sets verbosity level.\n"
          "    -c[num], --coeff_max[num]           Sets the last precise coefficient to compute\n"
          "                                        for RP-like properties.\n"
-         "    -t[num]                             Sets the t parameter for NI/SNI/PINI/RPC/RPE.\n"
+         "    -t[num]                             Sets the t parameter for NI/SNI/PINI/RPC/RPE/CRPC.\n"
          "    -k[num]                             Sets the k parameter for CNI.\n"
          "                                        This option is mandatory except when checking RP.\n"
          "    -o[num], --t_output[num]            Sets the t_output parameter for RPC/RPE.\n"
@@ -188,7 +189,8 @@ int main(int argc, char** argv) {
         (strcmp(argv[optind], "RPC")  == 0) ||
         (strcmp(argv[optind], "RPE")  == 0) ||
         (strcmp(argv[optind], "CNI") == 0)  ||
-        (strcmp(argv[optind], "CRP") == 0)) {
+        (strcmp(argv[optind], "CRP") == 0)  ||
+        (strcmp(argv[optind], "CRPC") == 0)) {
       property = argv[optind];
     } else {
       if (filename) {
@@ -208,7 +210,7 @@ int main(int argc, char** argv) {
   }
 
   if (!property) {
-    fprintf(stderr, "Mandatory argument RP/RPE/RPC missing. What do you expect me to compute? :'(\n\n");
+    fprintf(stderr, "Mandatory property argument missing. What do you expect me to compute? :'(\n\n");
     usage();
   }
 
@@ -230,7 +232,8 @@ int main(int argc, char** argv) {
     usage();
   }
 
-  if (((strcmp(property, "CNI")   == 0)) &&
+  if (((strcmp(property, "CNI")   == 0) ||
+       (strcmp(property, "CRPC") == 0)) &&
       ((t == -1) || (k==-1))) {
     fprintf(stderr, "When computing property %s, arguments -t T and -k K are mandatory. \n\n",
             property);
@@ -304,7 +307,9 @@ int main(int argc, char** argv) {
   } else if (strcmp(property, "CNI") == 0) {
     compute_CNI(pf, cores, t, k);
   } else if (strcmp(property, "CRP") == 0) {
-    compute_CRP_coeffs(pf, cores, coeff_max, k);
+    compute_CRP(pf, cores, coeff_max, k);
+  } else if (strcmp(property, "CRPC") == 0) {
+    compute_CRPC(pf, cores, coeff_max, k, t);
   } else {
     fprintf(stderr, "Property %s not implemented. Exiting.\n", property);
     exit(EXIT_FAILURE);

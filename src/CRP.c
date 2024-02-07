@@ -5,7 +5,7 @@
 #include <inttypes.h>
 #include <gmp.h>
 
-#include "NI.h"
+#include "CRP.h"
 #include "config.h"
 #include "circuit.h"
 #include "list_tuples.h"
@@ -106,7 +106,7 @@ static void update_coeffs(const Circuit* c, Comb* comb, int comb_len, SecretDep*
   update_coeff_c_single(c, coeffs, comb, comb_len);
 }
 
-void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
+void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
 
   char ** names;
   int length = generate_names(pf, &names);
@@ -138,7 +138,7 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
     Comb * comb = first_comb(i, 0);
     do{
 
-      printf("################ Cheking CNI with faults on ");
+      printf("################ Cheking CRP with faults on ");
       for(int j=0; j<i; j++){
         printf("%s, ", names[comb[j]]);
       }
@@ -202,7 +202,7 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
       // }
       // printf("%"PRIu64" ]\n", coeffs[i*2 + s][circuit->total_wires]);
 
-      free_circuit(c);
+      free_circuit(circuit);
       free(coeffs);
 
     }while(incr_comb_in_place(comb, i, length));
@@ -213,10 +213,43 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
   for(int i=0; i<length; i++){
     free(names[i]);
   }
-
   free(names);
-
   free(fv);
+
+  // add non faulty circuit
+  uint64_t * coeffs = calloc(c->total_wires+1, sizeof(*coeffs));
+  Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, fv);
+  // print_circuit(c);
+  DimRedData* dim_red_data = remove_elementary_wires(circuit, false);
+
+  struct callback_data data = {
+    .coeffs = coeffs,
+  };
+
+  // Computing coefficients
+  printf("################ Cheking CRP without faults\n");
+  for (int size = 0; size <= coeff_max_main_loop; size++) {
+
+    find_all_failures(circuit,
+                      cores,
+                      -1,    // t_in
+                      NULL,  // prefix
+                      size,  // comb_len
+                      coeff_max,  // max_len
+                      dim_red_data,
+                      true, // has_random
+                      NULL,  // first_comb
+                      false,  // include_outputs
+                      0,     // shares_to_ignore
+                      false, // PINI
+                      NULL,
+                      update_coeffs,
+                      (void*)&data);
+  }
+  free_circuit(circuit);
+  get_failure_proba(coeffs, total_wires+1, 0.01);
+  compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, 0.01, 0.01, res);
+  free(coeffs);
 
   gmp_printf("\n\nf(%.2lf, %.2lf) = %.10Ff for a total of %d faulty scenarios\n", 0.01, 0.01, res, cpt);
   mpf_clear(res);

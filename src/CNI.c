@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <inttypes.h>
 
-#include "NI.h"
+#include "CNI.h"
 #include "config.h"
 #include "circuit.h"
 #include "list_tuples.h"
