@@ -117,6 +117,7 @@ void construct_output_prefix(Circuit * c, StrMap * out, Comb * out_comb, Comb * 
 
     for(int j= 0; j< t*c->nb_duplications; j++){
       if(strcmp(names[j], deps->names[i]) == 0){
+        // printf("%s\n", names[j]);
         out_comb_res[idx] = i;
         idx++;
         break;
@@ -156,7 +157,6 @@ void compute_CRPC(ParsedFile * pf, int cores, int coeff_max, int k, int t) {
 
   uint64_t out_comb_len;
   Comb** out_comb_arr = gen_combinations(&out_comb_len, t, pf->shares - 1);
-  printf("len = %d\n", out_comb_len);
   Comb * out_comb = malloc((t * pf->nb_duplications) * sizeof(*out_comb));
 
   uint64_t** coeffs_out_comb;
@@ -272,7 +272,9 @@ void compute_CRPC(ParsedFile * pf, int cores, int coeff_max, int k, int t) {
     memset(coeffs_out_comb[i], 0, (total_wires + 1) *  sizeof(*coeffs_out_comb[i]));
   }
   Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, NULL);
+  //print_circuit(circuit);
   for (int size = 0; size <= coeff_max; size++) {
+
 
     for (unsigned int l = 0; l < out_comb_len; l++) {
       construct_output_prefix(circuit, pf->out, out_comb_arr[l], out_comb, t);
@@ -306,6 +308,12 @@ void compute_CRPC(ParsedFile * pf, int cores, int coeff_max, int k, int t) {
       coeffs[i] = max(coeffs[i], coeffs_out_comb[j][i]);
     }
   }
+
+  // printf("f(p) = [ "); fflush(stdout);
+  // for(int i =0; i<circuit->total_wires+1; i++){
+  //   printf("%lu, ", coeffs[i]);
+  // }
+  // printf("]\n");
   get_failure_proba(coeffs, total_wires+1, 0.01);
   compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, 0.01, 0.01, res);
   free_circuit(circuit);

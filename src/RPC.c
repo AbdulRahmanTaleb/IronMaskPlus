@@ -65,7 +65,7 @@ void compute_RPC_coeffs(Circuit* circuit, int cores, int coeff_max,
 
   // Computing coefficients
   printf("f(p) = [ "); fflush(stdout);
-  for (int size = 1; size <= coeff_max; size++) {
+  for (int size = 0; size <= coeff_max; size++) {
 
     for (unsigned int i = 0; i < out_comb_len; i++) {
       verif_prefix.content = out_comb_arr[i];
@@ -118,6 +118,8 @@ void compute_RPC_coeffs(Circuit* circuit, int cores, int coeff_max,
   printf("pmax = %.10f -- log2(pmax) = %.10f\n", p_max, log2(p_max));
   printf("pmin = %.10f -- log2(pmin) = %.10f\n", p_min, log2(p_min));
   printf("\n");
+
+  get_failure_proba(coeffs, circuit->total_wires+1, 0.01);
 
 
   // Freeing stuffs
