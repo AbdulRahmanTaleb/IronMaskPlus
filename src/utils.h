@@ -153,6 +153,7 @@ void print_dep_map(DepMap* map, int deps_size);
 
 
 typedef struct _parsed_file{
+  char * filename;
   int shares;
   int nb_duplications;
   StrMap* in;

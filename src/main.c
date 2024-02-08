@@ -45,6 +45,18 @@ int is_int(char* s) {
   return 1;
 }
 
+int is_double(char* s) {
+  if (!s || !*s) return 0;
+  int cpt=0;
+  while (*s) {
+    if(*s == ','){ cpt++; }
+    else if (*s < '0' || *s > '9'){ return 0; }
+    s++;
+  }
+  if(cpt > 1) return 0;
+  return 1;
+}
+
 void usage() {
   printf("Usage:\n"
          "    ironmask [OPTIONS] [NI|SNI|freeSNI|uniformSNI|IOS|PINI|RP|RPC|RPE|CNI|CRP|CRPC] FILE\n"
@@ -55,7 +67,7 @@ void usage() {
          "    -c[num], --coeff_max[num]           Sets the last precise coefficient to compute\n"
          "                                        for RP-like properties.\n"
          "    -t[num]                             Sets the t parameter for NI/SNI/PINI/RPC/RPE/CRPC.\n"
-         "    -k[num]                             Sets the k parameter for CNI.\n"
+         "    -k[num]                             Sets the k parameter for CNI/CRP/CRPC.\n"
          "                                        This option is mandatory except when checking RP.\n"
          "    -o[num], --t_output[num]            Sets the t_output parameter for RPC/RPE.\n"
          "    -j[num], --jobs[num]                Sets the number of core to use.\n"
@@ -65,7 +77,6 @@ void usage() {
          "                                        not use it unless you know what you're doing)\n"
          "    --glitch                            Takes glitches into account.\n"
          "    --transition                        Takes transitions into account\n"
-         "    -f, --faults                        Combined verification of faulted gadgets with correction countermeasures\n"
          "    -h, --help                          Prints this help information.\n\n");
 
   exit(EXIT_SUCCESS);
@@ -76,6 +87,7 @@ int main(int argc, char** argv) {
   setlocale(LC_NUMERIC, "");
 
   int verbose = 0, coeff_max = -1, t = -1, t_output = -1, opt_incompr = 0, cores = 1, k = -1;
+  double pleak = -1, pfault = -1;
   bool glitch = false, transition = false;
   char* property = NULL;
   char* filename = NULL;
@@ -87,6 +99,8 @@ int main(int argc, char** argv) {
       { "coeff_max",   required_argument, 0, 'c'            },
       { "t",           required_argument, 0, 't'            },
       { "k",           required_argument, 0, 'k'            },
+      { "l",           required_argument, 0, 'l'            },
+      { "f",           required_argument, 0, 'f'            },
       { "t_output",    required_argument, 0, 'o'            },
       { "jobs",        required_argument, 0, 'j'            },
       { "incompr-opt", no_argument,       0, 'i'            },
@@ -96,85 +110,97 @@ int main(int argc, char** argv) {
     };
 
     int option_index = 0;
-    int c = getopt_long(argc, argv, "hc:v:t:k:o:j:i",
+    int c = getopt_long(argc, argv, "hc:v:t:k:l:f:o:j:i",
                         long_options, &option_index);
 
     if (c == -1) break;
 
     switch (c) {
-    case 'h':
-      usage();
-      break;
-    case 'i':
-      opt_incompr = 1;
-      break;
-    case 'f':
-      break;
-    case 'v':
-      if (!is_int(optarg)) {
-        fprintf(stderr, "Option --verbose/-v expects an integer. Provided: '%s'. Exiting.\n",
-                optarg);
-        exit(EXIT_FAILURE);
-      } else {
-        verbose = atoi(optarg);
-      }
-      break;
-    case 'c':
-      if (!is_int(optarg)) {
-        fprintf(stderr, "Option --coeff_max/-c expects an integer. Provided: '%s'. Exiting.\n",
-                optarg);
-        exit(EXIT_FAILURE);
-      } else {
-        coeff_max = atoi(optarg);
-      }
-      break;
-    case 't':
-      if (!is_int(optarg)) {
-        fprintf(stderr, "Option -t expects an integer. Provided: '%s'. Exiting.\n",
-                optarg);
-        exit(EXIT_FAILURE);
-      } else {
-        t = atoi(optarg);
-      }
-      break;
-    case 'k':
-      if (!is_int(optarg)) {
-        fprintf(stderr, "Option -k expects an integer. Provided: '%s'. Exiting.\n",
-                optarg);
-        exit(EXIT_FAILURE);
-      } else {
-        k = atoi(optarg);
-        // if(k > 1){
-        //   fprintf(stderr, "Only at most a single fault is supported by the current implementation. Exiting.\n");
-        //   exit(EXIT_FAILURE);
-        // }
-      }
-      break;
-    case 'o':
-      if (!is_int(optarg)) {
-        fprintf(stderr, "Option --t_output expects an integer. Provided: '%s'. Exiting.\n",
-                optarg);
-        exit(EXIT_FAILURE);
-      } else {
-        t_output = atoi(optarg);
-      }
-      break;
-    case 'j':
-      if (!is_int(optarg)) {
-        fprintf(stderr, "Option -j expects an integer. Provided: '%s'. Exiting.\n", optarg);
-        exit(EXIT_FAILURE);
-      } else {
-        cores = atoi(optarg);
-      }
-      break;
-    case GLITCH_OPT:
-      glitch = true;
-      break;
-    case TRANSITION_OPT:
-      transition = true;
-      break;
-    default:
-      usage();
+      case 'h':
+        usage();
+        break;
+      case 'i':
+        opt_incompr = 1;
+        break;
+      case 'v':
+        if (!is_int(optarg)) {
+          fprintf(stderr, "Option --verbose/-v expects an integer. Provided: '%s'. Exiting.\n",
+                  optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          verbose = atoi(optarg);
+        }
+        break;
+      case 'c':
+        if (!is_int(optarg)) {
+          fprintf(stderr, "Option --coeff_max/-c expects an integer. Provided: '%s'. Exiting.\n",
+                  optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          coeff_max = atoi(optarg);
+        }
+        break;
+      case 't':
+        if (!is_int(optarg)) {
+          fprintf(stderr, "Option -t expects an integer. Provided: '%s'. Exiting.\n",
+                  optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          t = atoi(optarg);
+        }
+        break;
+      case 'k':
+        if (!is_int(optarg)) {
+          fprintf(stderr, "Option -k expects an integer. Provided: '%s'. Exiting.\n",
+                  optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          k = atoi(optarg);
+        }
+        break;
+      case 'l':
+        if (!is_double(optarg)) {
+          fprintf(stderr, "Option -l expects a float. Provided: '%s'. Exiting.\n",
+                  optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          sscanf(optarg, "%lf", &pleak);
+        }
+        break;
+      case 'f':
+        if (!is_double(optarg)) {
+          fprintf(stderr, "Option -f expects a float. Provided: '%s'. Exiting.\n",
+                  optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          sscanf(optarg, "%lf", &pfault);
+        }
+        break;
+      case 'o':
+        if (!is_int(optarg)) {
+          fprintf(stderr, "Option --t_output expects an integer. Provided: '%s'. Exiting.\n",
+                  optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          t_output = atoi(optarg);
+        }
+        break;
+      case 'j':
+        if (!is_int(optarg)) {
+          fprintf(stderr, "Option -j expects an integer. Provided: '%s'. Exiting.\n", optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          cores = atoi(optarg);
+        }
+        break;
+      case GLITCH_OPT:
+        glitch = true;
+        break;
+      case TRANSITION_OPT:
+        transition = true;
+        break;
+      default:
+        usage();
     }
   }
 
@@ -307,9 +333,18 @@ int main(int argc, char** argv) {
   } else if (strcmp(property, "CNI") == 0) {
     compute_CNI(pf, cores, t, k);
   } else if (strcmp(property, "CRP") == 0) {
-    compute_CRP(pf, cores, coeff_max, k);
+    if(pleak != -1 && pfault != -1){
+      compute_CRP_val(pf, coeff_max, k, pleak, pfault);
+    } else{
+      compute_CRP_coeffs(pf, cores, coeff_max, k);
+    }
   } else if (strcmp(property, "CRPC") == 0) {
-    compute_CRPC(pf, cores, coeff_max, k, t);
+    if(pleak != -1 && pfault != -1){
+      compute_CRPC_val(pf, coeff_max, k, t, pleak, pfault);
+    }
+    else{
+      compute_CRPC_coeffs(pf, cores, coeff_max, k, t);
+    }
   } else {
     fprintf(stderr, "Property %s not implemented. Exiting.\n", property);
     exit(EXIT_FAILURE);

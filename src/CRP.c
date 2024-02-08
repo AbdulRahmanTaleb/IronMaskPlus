@@ -26,7 +26,6 @@ struct callback_data {
 
 
 static int generate_names(ParsedFile * pf, char *** names_ptr){
-
   int length = pf->nb_duplications * pf->shares * pf->in->next_val + pf->randoms->next_val + pf->eqs->size;
   // we don't need to consider faults on output shares
   length = length - pf->nb_duplications * pf->shares * pf->out->next_val;
@@ -106,7 +105,13 @@ static void update_coeffs(const Circuit* c, Comb* comb, int comb_len, SecretDep*
   update_coeff_c_single(c, coeffs, comb, comb_len);
 }
 
-void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
+static void get_filename(ParsedFile * pf, int coeff_max, int k, char **name){
+  *name = malloc(strlen(pf->filename) + 50);
+  sprintf(*name, "%s_k%d_c%d.CRP_coeffs", pf->filename, k, coeff_max);
+}
+
+
+void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
 
   char ** names;
   int length = generate_names(pf, &names);
@@ -126,11 +131,11 @@ void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
   Faults * fv = malloc(sizeof(*fv));
   fv->length = k;
 
-  //length = 10;
-  mpf_t res;
-  mpf_init(res);
+  char * filename;
+  get_filename(pf, coeff_max, k, &filename);
+  FILE * coeffs_file = fopen(filename, "wb");
+  free(filename);
 
-  int cpt = 0;
   for(int i=1; i<=k; i++){
 
     fv->length = i;
@@ -138,7 +143,7 @@ void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
     Comb * comb = first_comb(i, 0);
     do{
 
-      printf("################ Cheking CRP with faults on ");
+      printf("################ Checking CRP with faults on ");
       for(int j=0; j<i; j++){
         printf("%s, ", names[comb[j]]);
       }
@@ -154,8 +159,7 @@ void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
 
       fv->vars = v;
 
-      uint64_t * coeffs = calloc(c->total_wires+1, sizeof(*coeffs));
-
+      uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
       Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, fv);
       // print_circuit(c);
       DimRedData* dim_red_data = remove_elementary_wires(circuit, false);
@@ -192,16 +196,8 @@ void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
         //   printf("%"PRIu64", ", coeffs[size]); fflush(stdout);
         // }
       }
-      cpt++;
 
-      get_failure_proba(coeffs, total_wires+1, 0.01);
-      compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, 0.01, 0.01, res);
-
-      // for (int k = coeff_max_main_loop+1; k < total_wires-1; k++) {
-      //   printf("%"PRIu64", ", coeffs[k]);
-      // }
-      // printf("%"PRIu64" ]\n", coeffs[circuit->total_wires]);
-
+      fwrite(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
       free_circuit(circuit);
       free(coeffs);
 
@@ -217,11 +213,10 @@ void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
   free(fv);
 
   // add non faulty circuit
-  uint64_t * coeffs = calloc(c->total_wires+1, sizeof(*coeffs));
+  uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
   Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, NULL);
   // print_circuit(c);
   DimRedData* dim_red_data = remove_elementary_wires(circuit, false);
-
   struct callback_data data = {
     .coeffs = coeffs,
   };
@@ -246,11 +241,55 @@ void compute_CRP(ParsedFile * pf, int cores, int coeff_max, int k) {
                       update_coeffs,
                       (void*)&data);
   }
+  fwrite(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
   free_circuit(circuit);
-  get_failure_proba(coeffs, total_wires+1, 0.01);
-  compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, 0.01, 0.01, res);
   free(coeffs);
 
-  gmp_printf("\n\nf(%.2lf, %.2lf) = %.10Ff for a total of %d faulty scenarios\n", 0.01, 0.01, res, cpt);
+  fclose(coeffs_file);
+}
+
+void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double pfault){
+  char ** names;
+  int length = generate_names(pf, &names);
+
+  Circuit * c = gen_circuit(pf, pf->glitch, pf->transition, NULL);
+  int total_wires = c->total_wires;
+  free_circuit(c);
+
+
+  char * filename;
+  get_filename(pf, coeff_max, k, &filename);
+  FILE * coeffs_file = fopen(filename, "rb");
+  if(!coeffs_file){
+    free(filename);
+    fprintf(stderr, "file %s not found...", filename);
+    exit(EXIT_FAILURE);
+  }
+  free(filename);
+
+  uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
+  mpf_t res;
+  mpf_init(res);
+
+  int cpt = 0;
+  for(int i=1; i<=k; i++){
+
+    Comb * comb = first_comb(i, 0);
+    do{
+
+      fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
+      // get_failure_proba(coeffs, total_wires+1, pleak);
+      compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, pleak, pfault, res);
+      cpt++;
+    }while(incr_comb_in_place(comb, i, length));
+  }
+
+  fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
+  // get_failure_proba(coeffs, total_wires+1, pleak);
+  compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, pleak, pfault, res);
+  
+  fclose(coeffs_file);
+
+  gmp_printf("\n\nf(%.2lf, %.2lf) = %.10Ff for a total of %d faulty scenarios\n", pleak, pfault, res, cpt);
   mpf_clear(res);
 }

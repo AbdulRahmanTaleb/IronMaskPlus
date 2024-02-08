@@ -230,6 +230,7 @@ ParsedFile* parse_file(char* filename) {
   pf->randoms = randoms;
   pf->nb_duplications = nb_duplications;
   pf->shares = shares;
+  pf->filename = strdup(filename);
 
   return pf;
 }
@@ -239,6 +240,7 @@ void free_parsed_file(ParsedFile * pf){
   free_str_map(pf->randoms);
   free_str_map(pf->out);
   free_eq_list(pf->eqs);
+  free(pf->filename);
   free(pf);
 }
 

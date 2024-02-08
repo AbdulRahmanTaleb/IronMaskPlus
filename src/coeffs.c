@@ -324,5 +324,5 @@ void compute_combined_intermediate_leakage_proba(uint64_t* coeffs, int k, int to
 
   mpf_add(res, res, fp_tmp);
 
-  gmp_printf("intermediate f(%.2lf, %.2lf) = %.6Ff\n", p, f, res);
+  //gmp_printf("intermediate f(%.2lf, %.2lf) = %.6Ff\n", p, f, res);
 }

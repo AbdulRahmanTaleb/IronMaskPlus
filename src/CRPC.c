@@ -133,7 +133,12 @@ void construct_output_prefix(Circuit * c, StrMap * out, Comb * out_comb, Comb * 
 
 }
 
-void compute_CRPC(ParsedFile * pf, int cores, int coeff_max, int k, int t) {
+static void get_filename(ParsedFile * pf, int coeff_max, int t, int k, char **name){
+  *name = malloc(strlen(pf->filename) + 60);
+  sprintf(*name, "%s_t%d_k%d_c%d.CRPC_coeffs", pf->filename, t, k, coeff_max);
+}
+
+void compute_CRPC_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, int t) {
 
   if(pf->out->next_val > 1){
     fprintf(stderr, "Cannot verify CRPC for gadgets with more than 1 output.");
@@ -171,8 +176,10 @@ void compute_CRPC(ParsedFile * pf, int cores, int coeff_max, int k, int t) {
 
   struct callback_data data = { .t = t, .coeffs = NULL, .nb_duplications = pf->nb_duplications };
 
-  mpf_t res;
-  mpf_init(res);
+  char * filename;
+  get_filename(pf, coeff_max, t, k, &filename);
+  FILE * coeffs_file = fopen(filename, "wb");
+  free(filename);
 
   for(int i=1; i<=k; i++){
 
@@ -243,14 +250,7 @@ void compute_CRPC(ParsedFile * pf, int cores, int coeff_max, int k, int t) {
         }
       }
 
-      get_failure_proba(coeffs, total_wires+1, 0.01);
-      compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, 0.01, 0.01, res);
-
-      // for (int k = coeff_max_main_loop+1; k < total_wires-1; k++) {
-      //   printf("%"PRIu64", ", coeffs[i*2 + s][k]);
-      // }
-      // printf("%"PRIu64" ]\n", coeffs[i*2 + s][circuit->total_wires]);
-
+      fwrite(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
       free_circuit(circuit);
       free(coeffs);
 
@@ -309,16 +309,55 @@ void compute_CRPC(ParsedFile * pf, int cores, int coeff_max, int k, int t) {
     }
   }
 
-  // printf("f(p) = [ "); fflush(stdout);
-  // for(int i =0; i<circuit->total_wires+1; i++){
-  //   printf("%lu, ", coeffs[i]);
-  // }
-  // printf("]\n");
-  get_failure_proba(coeffs, total_wires+1, 0.01);
-  compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, 0.01, 0.01, res);
+  fwrite(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
   free_circuit(circuit);
   free(coeffs);
+}
 
-  gmp_printf("\n\nf(%.2lf, %.2lf) = %.10Ff\n", 0.01, 0.01, res);
+
+void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak, double pfault){
+  char ** names;
+  int length = generate_names(pf, &names);
+
+  Circuit * c = gen_circuit(pf, pf->glitch, pf->transition, NULL);
+  int total_wires = c->total_wires;
+  free_circuit(c);
+
+
+  char * filename;
+  get_filename(pf, coeff_max, t, k, &filename);
+  FILE * coeffs_file = fopen(filename, "rb");
+  if(!coeffs_file){
+    free(filename);
+    fprintf(stderr, "file %s not found...", filename);
+    exit(EXIT_FAILURE);
+  }
+
+  free(filename);
+
+  uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
+  mpf_t res;
+  mpf_init(res);
+
+  int cpt = 0;
+  for(int i=1; i<=k; i++){
+
+    Comb * comb = first_comb(i, 0);
+    do{
+
+      fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
+      // get_failure_proba(coeffs, total_wires+1, pleak);
+      compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, pleak, pfault, res);
+      cpt++;
+    }while(incr_comb_in_place(comb, i, length));
+  }
+
+  fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
+  // get_failure_proba(coeffs, total_wires+1, pleak);
+  compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, pleak, pfault, res);
+  
+  fclose(coeffs_file);
+
+  gmp_printf("\n\nf(%.2lf, %.2lf) = %.10Ff for a total of %d faulty scenarios\n", pleak, pfault, res, cpt);
   mpf_clear(res);
 }
