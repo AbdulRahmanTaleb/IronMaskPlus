@@ -164,5 +164,20 @@ typedef struct _parsed_file{
   bool transition;
 }ParsedFile;
 
+typedef struct _fault_comb{
+  char ** names;
+  int length;
+}FaultsComb;
+
+typedef struct _faults_combs{
+  FaultsComb ** fc;
+  int length;
+}FaultsCombs;
+
+FaultsCombs * read_faulty_scenarios(ParsedFile * pf, int k, bool set, char * property);
+void free_faults_combs(FaultsCombs * fc);
+void print_faults_combs(FaultsCombs * fc);
+bool ignore_faulty_scenario(Faults * fv, FaultsCombs * fc);
+
 
 #endif

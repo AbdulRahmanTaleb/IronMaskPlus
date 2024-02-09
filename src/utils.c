@@ -400,3 +400,101 @@ void print_dep_map(DepMap* map, int deps_size) {
   } 
   printf("}\n"); 
 } 
+
+
+
+FaultsCombs * read_faulty_scenarios(ParsedFile * pf, int k, bool set, char * property){
+  char *name = malloc(strlen(pf->filename) + 50);
+  sprintf(name, "%s_faulty_scenarios_k%d_f%d_%s", pf->filename, k, set ? 1 : 0, property);
+  FILE * f = fopen(name, "r");
+  
+  if(!f){
+    fprintf(stderr, "You must execute the testing_correction.py first on your gadget to generate the %s file.\n", name);
+    free(name);
+    exit(EXIT_FAILURE);
+  }
+  free(name);
+  int length;
+  fscanf(f, " %d", &length);
+  if(length == 0){
+    return NULL;
+  }
+
+  FaultsCombs * sfc = malloc(sizeof(*sfc));
+  sfc->length = length;
+  sfc->fc = malloc(length * sizeof(*sfc->fc));
+  FaultsComb ** fc = sfc->fc;
+
+  for(int i=0; i<length; i++){
+    fc[i] = malloc(sizeof(*fc[i]));
+    fscanf(f, " %d ,", &fc[i]->length);
+    fc[i]->names = malloc(fc[i]->length * sizeof(*fc[i]->names));
+
+    for(int j=0; j< fc[i]->length-1; j++){
+      fc[i]->names[j] = malloc(60 * sizeof(*fc[i]->names[j]));
+      fscanf(f, " %[^,],", fc[i]->names[j]);
+    }
+
+    fc[i]->names[fc[i]->length-1] = malloc(60 * sizeof(*fc[i]->names[fc[i]->length-1]));
+    fscanf(f, " %s\n", fc[i]->names[fc[i]->length-1]);
+  }
+
+  return sfc;
+}
+
+
+void free_faults_combs(FaultsCombs * fc){
+  if(!fc) return;
+  for(int i=0; i< fc->length; i++){
+    FaultsComb * f = fc->fc[i];
+    for(int j=0; j<f->length; j++){
+      free(f->names[j]);
+    }
+    free(f);
+  }
+  free(fc->fc);
+  free(fc);
+}
+
+void print_faults_combs(FaultsCombs * fc){
+  if(!fc) return;
+  printf("%d\n", fc->length);
+  for(int i=0; i< fc->length; i++){
+    FaultsComb * f = fc->fc[i];
+    printf("%d, ", f->length);
+    for(int j=0; j<f->length-1; j++){
+      printf("%s, ", f->names[j]);
+    }
+    printf("%s\n", f->names[f->length-1]);
+  }
+}
+
+bool ignore_faulty_scenario(Faults * fv, FaultsCombs * fc){
+  if(!fc) return false;
+  for(int i=0; i<fc->length; i++){
+    if(fc->fc[i]->length == fv->length){
+
+      int * cpt = calloc(fv->length, sizeof(*cpt));
+
+      for(int j=0; j< fv->length; j++){
+        char * e = fc->fc[i]->names[j];
+
+        for(int k=0; k< fv->length; k++){
+          if(strcmp(e, fv->vars[k]->name) == 0){
+            cpt[k]++;
+            break;
+          }
+        }
+      }
+      bool equal = true;
+      for(int j = 0; j< fv->length; j++){
+        equal = equal & (cpt[j] == 1);
+      }
+      free(cpt);
+
+      if(equal) return true;
+    }
+  }
+
+  return false;
+}

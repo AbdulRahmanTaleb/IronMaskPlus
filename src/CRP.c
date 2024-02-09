@@ -26,42 +26,13 @@ struct callback_data {
 
 
 static int generate_names(ParsedFile * pf, char *** names_ptr){
-  int length = pf->nb_duplications * pf->shares * pf->in->next_val + pf->randoms->next_val + pf->eqs->size;
-  // we don't need to consider faults on output shares
-  length = length - pf->nb_duplications * pf->shares * pf->out->next_val;
-
-  char ** outputs = malloc(pf->nb_duplications * pf->shares * pf->out->next_val * sizeof(*outputs));
-  int idx = 0;
-  StrMapElem * o = pf->out->head;
-  while(o){
-    for(int i=0; i< pf->shares; i++){
-      for(int j=0; j< pf->nb_duplications; j++){
-        outputs[idx] = malloc(10 * sizeof(*outputs[idx]));
-        sprintf(outputs[idx], "%s%d_%d", o->key, i, j);
-        idx++;
-      }
-    }
-    o = o->next;
-  }
+  int length = pf->randoms->next_val + pf->eqs->size;
   
-
   *names_ptr = malloc(length * sizeof(*names_ptr));
   char ** names = *names_ptr;
 
-  idx = 0;
-  StrMapElem * elem = pf->in->head;
-  while(elem){
-    for(int i=0; i<pf->shares; i++){
-      for(int j=0; j<pf->nb_duplications; j++){
-        names[idx] = malloc(10 * sizeof(*names[idx]));
-        sprintf(names[idx], "%s%d_%d", elem->key, i, j);
-        idx++;
-      }
-    }
-    elem = elem->next;
-  }
-
-  elem = pf->randoms->head;
+  int idx = 0;
+  StrMapElem * elem = pf->randoms->head;
   while(elem){
     names[idx] = strdup(elem->key);
     idx++;
@@ -70,24 +41,10 @@ static int generate_names(ParsedFile * pf, char *** names_ptr){
 
   EqListElem * elem_eq = pf->eqs->head;
   while(elem_eq){
-    bool out = false;
-    for(int i=0; i< pf->nb_duplications * pf->shares * pf->out->next_val; i++){
-      if(strcmp(elem_eq->dst, outputs[i]) == 0){
-        out = true;
-        break;
-      }
-    }
-    if(!out){
-      names[idx] = strdup(elem_eq->dst);
-      idx++;
-    }
+    names[idx] = strdup(elem_eq->dst);
+    idx++;
     elem_eq = elem_eq->next;
   }
-
-  for(int i=0; i<pf->nb_duplications * pf->shares * pf->out->next_val; i++){
-    free(outputs[i]);
-  }
-  free(outputs);
 
   return length;
 }
@@ -105,13 +62,13 @@ static void update_coeffs(const Circuit* c, Comb* comb, int comb_len, SecretDep*
   update_coeff_c_single(c, coeffs, comb, comb_len);
 }
 
-static void get_filename(ParsedFile * pf, int coeff_max, int k, char **name){
+static void get_filename(ParsedFile * pf, int coeff_max, int k, char **name, bool set){
   *name = malloc(strlen(pf->filename) + 50);
-  sprintf(*name, "%s_k%d_c%d.CRP_coeffs", pf->filename, k, coeff_max);
+  sprintf(*name, "%s_k%d_c%d_f%d.CRP_coeffs", pf->filename, k, coeff_max, set ? 1 : 0);
 }
 
 
-void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
+void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, bool set) {
 
   char ** names;
   int length = generate_names(pf, &names);
@@ -128,14 +85,20 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
 
   free_circuit(c);
 
+  char * prop = malloc(4 *sizeof(*prop));
+  sprintf(prop, "CRP");
+  FaultsCombs * fc = read_faulty_scenarios(pf, k, set, prop);
+  free(prop);
+
   Faults * fv = malloc(sizeof(*fv));
   fv->length = k;
 
   char * filename;
-  get_filename(pf, coeff_max, k, &filename);
+  get_filename(pf, coeff_max, k, &filename, set);
   FILE * coeffs_file = fopen(filename, "wb");
   free(filename);
 
+  int cpt_ignored = 0;
   for(int i=1; i<=k; i++){
 
     fv->length = i;
@@ -153,11 +116,17 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
 
       for(int j=0; j<i; j++){
         v[j] = malloc(sizeof(*v[j]));
-        v[j]->set = true;
+        v[j]->set = set;
         v[j]->name = names[comb[j]];
       }
 
       fv->vars = v;
+
+      if(ignore_faulty_scenario(fv, fc)){
+        printf("Ignoring...\n");
+        cpt_ignored++;
+        goto skip;
+      }
 
       uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
       Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, fv);
@@ -200,6 +169,10 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
       fwrite(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
       free_circuit(circuit);
       free(coeffs);
+
+      skip:;
+
+      free(v);
 
     }while(incr_comb_in_place(comb, i, length));
 
@@ -246,9 +219,12 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k) {
   free(coeffs);
 
   fclose(coeffs_file);
+
+  printf("Ignored %d combs\n", cpt_ignored);
+  free_faults_combs(fc);
 }
 
-void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double pfault){
+void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double pfault, bool set){
   char ** names;
   int length = generate_names(pf, &names);
 
@@ -258,7 +234,7 @@ void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double
 
 
   char * filename;
-  get_filename(pf, coeff_max, k, &filename);
+  get_filename(pf, coeff_max, k, &filename, set);
   FILE * coeffs_file = fopen(filename, "rb");
   if(!coeffs_file){
     free(filename);
@@ -271,16 +247,45 @@ void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double
   mpf_t res;
   mpf_init(res);
 
+  char * prop = malloc(4 *sizeof(*prop));
+  sprintf(prop, "CRP");
+  FaultsCombs * fc = read_faulty_scenarios(pf, k, set, prop);
+  free(prop);
+
+  Faults * fv = malloc(sizeof(*fv));
+  fv->length = k;
+
   int cpt = 0;
+  int cpt_ignored = 0;
   for(int i=1; i<=k; i++){
+
+    fv->length = i;
 
     Comb * comb = first_comb(i, 0);
     do{
+
+      FaultedVar ** v = malloc(i * sizeof(*v));
+
+      for(int j=0; j<i; j++){
+        v[j] = malloc(sizeof(*v[j]));
+        v[j]->set = set;
+        v[j]->name = names[comb[j]];
+      }
+
+      fv->vars = v;
+
+      if(ignore_faulty_scenario(fv, fc)){
+        cpt_ignored++;
+        goto skip;
+      }
 
       fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
       // get_failure_proba(coeffs, total_wires+1, pleak);
       compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, pleak, pfault, res);
       cpt++;
+
+      skip:;
+      free(v);
     }while(incr_comb_in_place(comb, i, length));
   }
 
@@ -290,6 +295,10 @@ void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double
   
   fclose(coeffs_file);
 
+  printf("Ignored %d combs\n", cpt_ignored);
+  free_faults_combs(fc);
+
   gmp_printf("\n\nf(%.2lf, %.2lf) = %.10Ff for a total of %d faulty scenarios\n", pleak, pfault, res, cpt);
   mpf_clear(res);
+  
 }

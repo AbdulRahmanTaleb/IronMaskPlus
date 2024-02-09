@@ -228,7 +228,7 @@ def main():
     parser.add_argument("-f", help="File", type = str)
 
     parser.add_argument("-k", help="Number of faults to consider", type=int)
-    parser.add_argument("-t", help="Type of faults (0:reset, 1:set)", type=int, default = 1)
+    parser.add_argument("-s", help="Type of faults (0:reset, 1:set)", type=int, default = 1)
     parser.add_argument("-p", help="Property", type=str, choices=["CRP","CRPC"], default="CRP")
     args = parser.parse_args()
 
@@ -239,7 +239,7 @@ def main():
 
 
     set = True
-    if(args.t == 0):
+    if(args.s == 0):
         set = False
 
     length, scenarios = c.get_uncorrected_faulty_combs(args.k, args.p, set)
@@ -250,7 +250,7 @@ def main():
         res = res + ((f**(len(s))) * (1-f)**(length-len(s)))
     print("mu = ",res) 
 
-    file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.t)+"_"+str(args.p), "w")
+    file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.s)+"_"+str(args.p), "w")
     file.write(str(len(scenarios)) +  "\n")
     for s in scenarios:
         line = str(len(s))+", "

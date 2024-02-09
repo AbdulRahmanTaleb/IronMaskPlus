@@ -89,6 +89,7 @@ int main(int argc, char** argv) {
   int verbose = 0, coeff_max = -1, t = -1, t_output = -1, opt_incompr = 0, cores = 1, k = -1;
   double pleak = -1, pfault = -1;
   bool glitch = false, transition = false;
+  bool set = true;
   char* property = NULL;
   char* filename = NULL;
 
@@ -101,6 +102,7 @@ int main(int argc, char** argv) {
       { "k",           required_argument, 0, 'k'            },
       { "l",           required_argument, 0, 'l'            },
       { "f",           required_argument, 0, 'f'            },
+      { "s",           required_argument, 0, 's'            },
       { "t_output",    required_argument, 0, 'o'            },
       { "jobs",        required_argument, 0, 'j'            },
       { "incompr-opt", no_argument,       0, 'i'            },
@@ -110,7 +112,7 @@ int main(int argc, char** argv) {
     };
 
     int option_index = 0;
-    int c = getopt_long(argc, argv, "hc:v:t:k:l:f:o:j:i",
+    int c = getopt_long(argc, argv, "hc:v:t:k:l:f:s:o:j:i",
                         long_options, &option_index);
 
     if (c == -1) break;
@@ -174,6 +176,15 @@ int main(int argc, char** argv) {
           exit(EXIT_FAILURE);
         } else {
           sscanf(optarg, "%lf", &pfault);
+        }
+        break;
+      case 's':
+        if (!is_int(optarg)) {
+          fprintf(stderr, "Option -s expects an integer 0 or 1. Provided: '%s'. Exiting.\n",
+                  optarg);
+          exit(EXIT_FAILURE);
+        } else {
+          set = atoi(optarg) == 0 ? false : true;
         }
         break;
       case 'o':
@@ -334,16 +345,16 @@ int main(int argc, char** argv) {
     compute_CNI(pf, cores, t, k);
   } else if (strcmp(property, "CRP") == 0) {
     if(pleak != -1 && pfault != -1){
-      compute_CRP_val(pf, coeff_max, k, pleak, pfault);
+      compute_CRP_val(pf, coeff_max, k, pleak, pfault, set);
     } else{
-      compute_CRP_coeffs(pf, cores, coeff_max, k);
+      compute_CRP_coeffs(pf, cores, coeff_max, k, set);
     }
   } else if (strcmp(property, "CRPC") == 0) {
     if(pleak != -1 && pfault != -1){
-      compute_CRPC_val(pf, coeff_max, k, t, pleak, pfault);
+      compute_CRPC_val(pf, coeff_max, k, t, pleak, pfault, set);
     }
     else{
-      compute_CRPC_coeffs(pf, cores, coeff_max, k, t);
+      compute_CRPC_coeffs(pf, cores, coeff_max, k, t, set);
     }
   } else {
     fprintf(stderr, "Property %s not implemented. Exiting.\n", property);
