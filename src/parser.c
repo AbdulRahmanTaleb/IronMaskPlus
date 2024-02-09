@@ -990,6 +990,7 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
   compute_rands_usage(c);
   compute_contained_secrets(c, temporary_mult_idx);
   compute_bit_deps(c, temporary_mult_idx);
+  compute_total_correction_bit_deps(c);
 
 
   //print_circuit(c);

@@ -6,6 +6,31 @@
 #include "circuit.h"
 #include "vectors.h"
 
+BitDep * init_bit_dep(){
+  BitDep * bit_dep = malloc(sizeof(*bit_dep));
+  bit_dep->constant = 0;
+  bit_dep->out = 0;
+  bit_dep->secrets[0] = bit_dep->secrets[1] = 0;
+
+  memset(bit_dep->randoms, 0, RANDOMS_MAX_LEN*sizeof(*bit_dep->randoms));
+  memset(bit_dep->mults, 0, BITMULT_MAX_LEN*sizeof(*bit_dep->mults));
+  memset(bit_dep->correction_outputs, 0, BITCORRECTION_OUTPUTS_MAX_LEN*sizeof(*bit_dep->correction_outputs));
+
+  return bit_dep;
+
+}
+
+void set_bit_dep_zero(BitDep* bit_dep){
+  bit_dep->constant = 0;
+  bit_dep->out = 0;
+  bit_dep->secrets[0] = bit_dep->secrets[1] = 0;
+
+  memset(bit_dep->randoms, 0, RANDOMS_MAX_LEN*sizeof(*bit_dep->randoms));
+  memset(bit_dep->mults, 0, BITMULT_MAX_LEN*sizeof(*bit_dep->mults));
+  memset(bit_dep->correction_outputs, 0, BITCORRECTION_OUTPUTS_MAX_LEN*sizeof(*bit_dep->correction_outputs));
+
+}
+
 // Count the total number of wires based on the array |c->weights|,
 // and updates |c->total_wires| with this values.
 void compute_total_wires(Circuit* c) {
@@ -296,7 +321,7 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
     DepArrVector* dep = deps->deps[i];
     bit_deps[i] = BitDepVector_make();
     for (int j = 0; j < dep->length; j++) {
-      BitDep* bit_dep = calloc(1, sizeof(*bit_dep));
+      BitDep* bit_dep = init_bit_dep();
       bit_dep->secrets[0] = dep->content[j][0];
       if (secret_count == 2) bit_dep->secrets[1] = dep->content[j][1];
 
@@ -347,7 +372,7 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
       DepArrVector* dep = correction_outputs_deps[i];
       correction_outputs_deps_bits[i] = BitDepVector_make();
       for (int j = 0; j < dep->length; j++) {
-        BitDep* bit_dep = calloc(1, sizeof(*bit_dep));
+        BitDep* bit_dep = init_bit_dep();
         bit_dep->secrets[0] = dep->content[j][0];
         if (secret_count == 2) bit_dep->secrets[1] = dep->content[j][1];
 
@@ -445,6 +470,64 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
     }
   }
 }
+
+
+void compute_total_correction_bit_deps(Circuit * circuit){
+  int corr_outputs_count = circuit->deps->correction_outputs->length;
+  if(corr_outputs_count == 0){
+    return;
+  }
+
+  int bit_rand_len = 1 + (circuit->random_count + circuit->secret_count) / 64;
+  int bit_mult_len = (circuit->deps->mult_deps->length == 0) ? 0 :  1 + circuit->deps->mult_deps->length / 64;
+  int bit_correction_outputs_len = (corr_outputs_count == 0) ? 0 : 1 + corr_outputs_count / 64;
+  BitDepVector ** correction_outputs_deps_bits = circuit->deps->correction_outputs->correction_outputs_deps_bits;
+  BitDep ** total_deps = malloc(corr_outputs_count * sizeof(*total_deps));
+
+  for (int i = 0; i < corr_outputs_count; i++) {
+    BitDepVector* dep = correction_outputs_deps_bits[i];
+    total_deps[i] = init_bit_dep();
+
+    for (int j = 0; j < dep->length; j++) {
+      BitDep* bit_dep = dep->content[j];
+
+      total_deps[i]->secrets[0] |= bit_dep->secrets[0];
+      if (circuit->secret_count == 2) total_deps[i]->secrets[1] |= bit_dep->secrets[1];
+      for (int k = 0; k < bit_rand_len; k++) {
+        total_deps[i]->randoms[k] |= bit_dep->randoms[k];
+      }
+      for (int k = 0; k < bit_mult_len; k++) {
+        total_deps[i]->mults[k] |= bit_dep->mults[k];
+      }
+      total_deps[i]->constant |= bit_dep->constant;
+
+      for (int l = 0; l < bit_correction_outputs_len; l++) {
+        uint64_t corr_out_elem = bit_dep->correction_outputs[l];
+
+        while (corr_out_elem != 0) {
+          int corr_output_idx_in_elem = __builtin_ia32_lzcnt_u64(corr_out_elem);
+          corr_out_elem &= ~(1ULL << (63-corr_output_idx_in_elem));
+          int corr_out_idx = l * 64 + (63-corr_output_idx_in_elem);
+
+          BitDep * bit_dep_inter = total_deps[corr_out_idx];
+
+          total_deps[i]->secrets[0] |= bit_dep_inter->secrets[0];
+          if (circuit->secret_count == 2) total_deps[i]->secrets[1] |= bit_dep_inter->secrets[1];
+          for (int k = 0; k < bit_rand_len; k++) {
+            total_deps[i]->randoms[k] |= bit_dep_inter->randoms[k];
+          }
+          for (int k = 0; k < bit_mult_len; k++) {
+            total_deps[i]->mults[k] |= bit_dep_inter->mults[k];
+          }
+          total_deps[i]->constant |= bit_dep_inter->constant;
+        }
+      }
+    }
+  }
+  circuit->deps->correction_outputs->total_deps = total_deps;
+}
+
+
 
 void print_circuit(const Circuit* c) {
   DependencyList* deps = c->deps;

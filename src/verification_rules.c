@@ -356,14 +356,44 @@ static void gauss_step(BitDep* real_dep,
 // Sets |gauss_rands[idx]| to contain the first random that appears in
 // |deps[idx]|.
 static void set_gauss_rand(BitDep** deps, GaussRand* gauss_rands,
-                           int idx, int bit_rand_len) {
+                           int idx, int bit_rand_len,
+                           CorrectionOutputs * correction_outputs, int bit_correction_outputs_len) {
   BitDep* dep = deps[idx];
   for (int i = 0; i < bit_rand_len; i++) {
     if (dep->randoms[i]) {
-      gauss_rands[idx].is_set = 1;
-      gauss_rands[idx].idx    = i;
-      gauss_rands[idx].mask   = 1ULL << (63-__builtin_ia32_lzcnt_u64(dep->randoms[i]));
-      return;
+      if(correction_outputs->length == 0){
+        gauss_rands[idx].is_set = 1;
+        gauss_rands[idx].idx    = i;
+        gauss_rands[idx].mask   = 1ULL << (63-__builtin_ia32_lzcnt_u64(dep->randoms[i]));
+        return;
+      }
+      else{
+        bool corr = false;
+        for(int j=0; j<bit_correction_outputs_len; j++){
+          uint64_t corr_out_elem = dep->correction_outputs[j];
+          while (corr_out_elem != 0) {
+            corr = true;
+            int corr_output_idx_in_elem = __builtin_ia32_lzcnt_u64(corr_out_elem);
+            corr_out_elem &= ~(1ULL << (63-corr_output_idx_in_elem));
+            int corr_out_idx = j * 64 + (63-corr_output_idx_in_elem);
+
+            uint64_t rdep = correction_outputs->total_deps[corr_out_idx]->randoms[i];
+
+            if(((rdep & dep->randoms[i]) ^ dep->randoms[i]) != 0){
+              gauss_rands[idx].is_set = 1;
+              gauss_rands[idx].idx    = i;
+              gauss_rands[idx].mask   = 1ULL << (63-__builtin_ia32_lzcnt_u64((rdep & dep->randoms[i]) ^ dep->randoms[i]));
+              return;
+            }
+          }
+        }
+        if(!corr){
+          gauss_rands[idx].is_set = 1;
+          gauss_rands[idx].idx    = i;
+          gauss_rands[idx].mask   = 1ULL << (63-__builtin_ia32_lzcnt_u64(dep->randoms[i]));
+          return;
+        }
+      }
     }
   }
   gauss_rands[idx].mask = 0;
@@ -500,7 +530,7 @@ static int is_failure_with_randoms(const Circuit* circuit,
       for (int i = 0; i < copy_size; i++) {
           gauss_step(local_deps_copy[i], local_deps_copy, gauss_rands_copy,
                     bit_rand_len, bit_mult_len, bit_correction_outputs_len, i);
-          set_gauss_rand(local_deps_copy, gauss_rands_copy, i, bit_rand_len);
+          set_gauss_rand(local_deps_copy, gauss_rands_copy, i, bit_rand_len, circuit->deps->correction_outputs, bit_correction_outputs_len);
       }
 
       for (int i = 0; i < copy_size; i++) {
@@ -845,7 +875,7 @@ static void replace_correction_outputs_in_dep(BitDep** local_deps, int idx, Gaus
 
         gauss_step(bit_dep_arr->content[dep_idx], local_deps, gauss_rands,
                 bit_rand_len, bit_mult_len, bit_correction_outputs_len, *local_deps_len);
-        set_gauss_rand(local_deps, gauss_rands, *local_deps_len, bit_rand_len);
+        set_gauss_rand(local_deps, gauss_rands, *local_deps_len, bit_rand_len, correction_outputs, bit_correction_outputs_len);
 
         (*local_deps_len)++;
 
@@ -1041,7 +1071,10 @@ int _verify_tuples(const Circuit* circuit, // The circuit
   BitDep* local_deps_copy[local_deps_max_size];
   for (int i = 0; i < local_deps_max_size; i++) {
     local_deps[i] = alloca(sizeof(**local_deps));
+    set_bit_dep_zero(local_deps[i]);
+
     local_deps_copy[i] = alloca(sizeof(**local_deps_copy));
+    set_bit_dep_zero(local_deps_copy[i]);
   }
   GaussRand gauss_rands[local_deps_max_size];
   GaussRand gauss_rands_copy[local_deps_max_size];
@@ -1050,6 +1083,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
   BitDep* deps_fact[local_deps_max_size];
   for (int i = 0; i < local_deps_max_size; i++) {
     deps_fact[i] = alloca(sizeof(**deps_fact));
+    set_bit_dep_zero(deps_fact[i]);
   }
   int deps_length_fact = 0;
   GaussRand deps_rands_fact[local_deps_max_size];
@@ -1139,7 +1173,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
       for (int dep_idx = 0; dep_idx < bit_dep_arr->length; dep_idx++) {
         gauss_step(bit_dep_arr->content[dep_idx], local_deps, gauss_rands,
                    bit_rand_len, bit_mult_len, bit_correction_outputs_len, local_deps_len);
-        set_gauss_rand(local_deps, gauss_rands, local_deps_len, bit_rand_len);
+        set_gauss_rand(local_deps, gauss_rands, local_deps_len, bit_rand_len, deps->correction_outputs, bit_correction_outputs_len);
         local_deps_len++;
         replace_correction_outputs_in_dep(local_deps, local_deps_len - 1, gauss_rands, &local_deps_len, 
                                                bit_correction_outputs_len, bit_rand_len,
@@ -1285,7 +1319,7 @@ int _verify_tuples(const Circuit* circuit, // The circuit
         // Apply Gauss on both tuples
         for (int l = up_to_date_deps_length_fact; l < deps_length_fact; l++) {
           gauss_step(deps_fact[l], deps_fact, deps_rands_fact, bit_rand_len, bit_mult_len, bit_correction_outputs_len, l);
-          set_gauss_rand(deps_fact, deps_rands_fact, i, bit_rand_len);
+          set_gauss_rand(deps_fact, deps_rands_fact, i, bit_rand_len, deps->correction_outputs, bit_correction_outputs_len);
 
           //printf("%d\n",l);
           replace_correction_outputs_in_dep(deps_fact, l, deps_rands_fact, &deps_length_fact, 
@@ -1841,9 +1875,11 @@ int check_output_uniformity(const Circuit * circuit, BitDep** output_deps, Gauss
   }
   printf("\n\n");
 
+  int bit_correction_outputs_len = (deps->correction_outputs->length == 0) ? 0 : 1 + deps->correction_outputs->length / 64;
+
   for(int i=0; i< circuit->share_count; i++){
     gauss_step(output_deps[i], output_deps, gauss_rands, bit_rand_len, bit_mult_len, 0, i);
-    set_gauss_rand(output_deps, gauss_rands, i, bit_rand_len);
+    set_gauss_rand(output_deps, gauss_rands, i, bit_rand_len, deps->correction_outputs, bit_correction_outputs_len);
   }
 
   printf("Output Bit dependencies AFTER reduction:\n");
@@ -2091,6 +2127,8 @@ static int is_failure_with_randoms_freeSNI_IOS(const Circuit* circuit,
   int bit_rand_len = 1 + random_count / 64;
   int bit_mult_len = (mult_count == 0) ? 0 :  1 + mult_count / 64;
 
+  int bit_correction_outputs_len = (deps->correction_outputs->length == 0) ? 0 : 1 + deps->correction_outputs->length / 64;
+
   // Collecting all randoms of |local_deps| in the binary array |randoms|.
   uint64_t randoms[bit_rand_len];
   memset(randoms, 0, bit_rand_len * sizeof(*randoms));
@@ -2147,7 +2185,7 @@ static int is_failure_with_randoms_freeSNI_IOS(const Circuit* circuit,
       for (int i = 0; i < copy_size; i++) {
           gauss_step(local_deps_copy[i], local_deps_copy, gauss_rands_copy,
                     bit_rand_len, bit_mult_len, 0, i);
-          set_gauss_rand(local_deps_copy, gauss_rands_copy, i, bit_rand_len);
+          set_gauss_rand(local_deps_copy, gauss_rands_copy, i, bit_rand_len, deps->correction_outputs, bit_correction_outputs_len);
       }
 
       final_inputs[0] = 0; final_inputs[1] = 0;
@@ -2197,6 +2235,8 @@ int _verify_tuples_freeSNI_IOS(const Circuit* circuit, // The circuit
   int bit_mult_len = (mult_count == 0) ? 0 :  1 + mult_count / 64;
   int bit_rand_len = 1 + (random_count / 64);
   int last_var = circuit->length;
+
+  int bit_correction_outputs_len = (deps->correction_outputs->length == 0) ? 0 : 1 + deps->correction_outputs->length / 64;
 
   //VarVector* prefix = &empty_VarVector;
 
@@ -2283,12 +2323,12 @@ int _verify_tuples_freeSNI_IOS(const Circuit* circuit, // The circuit
 
         gauss_step(bit_dep_arr->content[dep_idx], local_deps, gauss_rands,
                    bit_rand_len, bit_mult_len, 0, local_deps_len);
-        set_gauss_rand(local_deps, gauss_rands, local_deps_len, bit_rand_len);
+        set_gauss_rand(local_deps, gauss_rands, local_deps_len, bit_rand_len, deps->correction_outputs, bit_correction_outputs_len);
 
         //without outs
         gauss_step(bit_dep_arr->content[dep_idx], local_deps_without_outs, gauss_rands_without_outs,
                    bit_rand_len, bit_mult_len, 0, local_deps_without_outs_len);
-        set_gauss_rand(local_deps_without_outs, gauss_rands_without_outs, local_deps_without_outs_len, bit_rand_len);
+        set_gauss_rand(local_deps_without_outs, gauss_rands_without_outs, local_deps_without_outs_len, bit_rand_len, deps->correction_outputs, bit_correction_outputs_len);
 
 
         local_deps_len++;

@@ -58,6 +58,7 @@ typedef struct _multDependencyList {
 typedef struct _correctionOutputDependency {
   struct _DepArrVector_vector** correction_outputs_deps;
   struct _BitDepVector_vector** correction_outputs_deps_bits;
+  BitDep ** total_deps;
   char ** correction_outputs_names;
   int length;
 } CorrectionOutputs;
@@ -128,11 +129,13 @@ typedef struct _faults_struct{
 }Faults;
 
 
-
+BitDep * init_bit_dep();
+void set_bit_dep_zero(BitDep* bit_dep);
 void compute_total_wires(Circuit* c);
 void compute_rands_usage(Circuit* c);
 void compute_contained_secrets(Circuit* c, int ** temporary_mult_idx);
 void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx);
+void compute_total_correction_bit_deps(Circuit * circuit);
 void print_circuit(const Circuit* c);
 
 void print_circuit_after_dim_red(const Circuit* c, const Circuit* c_old);
