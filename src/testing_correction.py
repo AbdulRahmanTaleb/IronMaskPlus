@@ -251,6 +251,7 @@ def main():
     print("mu = ",res) 
 
     file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.t)+"_"+str(args.p), "w")
+    file.write(str(len(scenarios)) +  "\n")
     for s in scenarios:
         line = str(len(s))+", "
         for e in s[:-1]:
