@@ -333,15 +333,31 @@ void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak
   mpf_t res;
   mpf_init(res);
 
+  // int input_length = pf->shares * pf->nb_duplications * pf->in->next_val;
+  // char** input_names = malloc(input_length * sizeof(*input_names));
+  // int idx = 0;
+  // StrMapElem * elem = pf->in->head;
+  // while(elem){
+  //   for(int i=0; i<pf->shares; i++){
+  //     for(int j=0; j<pf->nb_duplications; j++){
+  //       input_names[idx] = malloc(10 * sizeof(*input_names[idx]));
+  //       sprintf(input_names[idx], "%s%d_%d", elem->key, i, j);
+  //       idx++;
+  //     }
+  //   }
+  //   elem = elem->next;
+  // }
+
   int cpt = 0;
   int cpt_ignored = 0;
+  int remove;
   for(int i=1; i<=k; i++){
 
     fv->length = i;
 
     Comb * comb = first_comb(i, 0);
     do{
-
+      remove = 0;
       FaultedVar ** v = malloc(i * sizeof(*v));
       for(int j=0; j<i; j++){
         v[j] = malloc(sizeof(*v[j]));
@@ -355,9 +371,18 @@ void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak
         goto skip;
       }
 
+      // for(int l=0;l<i;l++){
+      //   for(int m=0; m< input_length; m++){
+      //     if(strcmp(fv->vars[l]->name, input_names[m]) == 0){
+      //       remove++;
+      //       break;
+      //     }
+      //   }
+      // }
+
       fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
       // get_failure_proba(coeffs, total_wires+1, pleak);
-      compute_combined_intermediate_leakage_proba(coeffs, i, length - pf->shares * pf->nb_duplications * pf->out->next_val, total_wires+1, pleak, pfault, res);
+      compute_combined_intermediate_leakage_proba(coeffs, i-remove, length - pf->shares * pf->nb_duplications * pf->in->next_val, total_wires+1, pleak, pfault, res, -1);
       cpt++;
 
       skip:;
@@ -367,10 +392,15 @@ void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak
 
   fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
   // get_failure_proba(coeffs, total_wires+1, pleak);
-  compute_combined_intermediate_leakage_proba(coeffs, 0, length - pf->shares * pf->nb_duplications * pf->out->next_val, total_wires+1, pleak, pfault, res);
+  compute_combined_intermediate_leakage_proba(coeffs, 0, length - pf->shares * pf->nb_duplications * pf->in->next_val, total_wires+1, pleak, pfault, res, -1);
   
   fclose(coeffs_file);
 
   gmp_printf("\n\nf(%.2lf, %.2lf) = %.10Ff for a total of %d faulty scenarios\n", pleak, pfault, res, cpt);
   mpf_clear(res);
+
+  // for(int i=0; i<input_length; i++){
+  //   free(input_names[i]);
+  // }
+  // free(input_names);
 }

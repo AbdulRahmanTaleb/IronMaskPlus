@@ -204,6 +204,8 @@ class Circuit:
         for i in range(1,k+1):
             print("Testing combinations of ", i," faults...")
             for comb in itertools.combinations(names, i):
+                if((i == 1) and (comb[i] in self.input_name_from_duplicate.keys())):
+                    continue
                 comb_rands = []
                 for c in comb:
                     if(c in self.randoms):

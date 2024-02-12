@@ -244,8 +244,11 @@ void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double
   free(filename);
 
   uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
-  mpf_t res;
-  mpf_init(res);
+  mpf_t epsilon, mu, epsilon_max, mu_max;
+  mpf_init(epsilon);
+  mpf_init(mu);
+  mpf_init(epsilon_max);
+  mpf_init(mu_max);
 
   char * prop = malloc(4 *sizeof(*prop));
   sprintf(prop, "CRP");
@@ -275,13 +278,16 @@ void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double
       fv->vars = v;
 
       if(ignore_faulty_scenario(fv, fc)){
+        compute_combined_intermediate_mu(i, length, pfault, mu);
+        compute_combined_intermediate_mu(i, length, pfault, mu_max);
         cpt_ignored++;
         goto skip;
       }
 
       fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
       // get_failure_proba(coeffs, total_wires+1, pleak);
-      compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, pleak, pfault, res);
+      compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, pleak, pfault, epsilon, -1);
+      compute_combined_intermediate_leakage_proba(coeffs, i, length, total_wires+1, pleak, pfault, epsilon_max, coeff_max);
       cpt++;
 
       skip:;
@@ -291,14 +297,26 @@ void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double
 
   fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
   // get_failure_proba(coeffs, total_wires+1, pleak);
-  compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, pleak, pfault, res);
-  
+  compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, pleak, pfault, epsilon, -1);
+  compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, pleak, pfault, epsilon_max, coeff_max);
+
   fclose(coeffs_file);
 
-  printf("Ignored %d combs\n", cpt_ignored);
+  // printf("Ignored %d combs\n", cpt_ignored);
   free_faults_combs(fc);
 
-  gmp_printf("\n\nf(%.2lf, %.2lf) = %.10Ff for a total of %d faulty scenarios\n", pleak, pfault, res, cpt);
-  mpf_clear(res);
+  compute_combined_mu_max(k, length, pfault, mu_max);
+
+  compute_combined_final_proba(epsilon, mu);
+  compute_combined_final_proba(epsilon_max, mu_max);
+  printf("\n\n");
+  gmp_printf("pfault = %.2lf, pleak = %.2lf:\n\n", pfault, pleak);
+  gmp_printf("mu min      = %.10Ff\n", mu);
+  gmp_printf("epsilon min = %.10Ff\n", epsilon);
+
+  gmp_printf("\nmu max      = %.10Ff\n", mu_max);
+  gmp_printf("epsilon max = %.10Ff\n", epsilon_max);
+  mpf_clear(epsilon);
+  mpf_clear(mu);
   
 }

@@ -275,17 +275,30 @@ void get_failure_proba(uint64_t* coeffs, int len, double p){
 }
 
 
-void compute_combined_intermediate_leakage_proba(uint64_t* coeffs, int k, int total, int coeffs_size, double p, double f, mpf_t res){
+void compute_combined_intermediate_leakage_proba(uint64_t* coeffs, int k, int total, int coeffs_size, double p, double f, mpf_t res, int c_max){
   mpf_t coeffs_mpf[coeffs_size];
 
-  for (int i = 0; i < coeffs_size; i++) {
-    mpf_init_set_ui(coeffs_mpf[i], coeffs[i]);
+  if(c_max == -1){
+    for (int i = 0; i < coeffs_size; i++) {
+      mpf_init_set_ui(coeffs_mpf[i], coeffs[i]);
+    }
+  }
+  else{
+    for (int i = 0; i <= c_max; i++) {
+      mpf_init_set_ui(coeffs_mpf[i], coeffs[i]);
+    }
+    for (int i = c_max+1; i < coeffs_size; i++) {
+      n_choose_k_gmp(i, coeffs_size-1, coeffs_mpf[i]);
+      // if(i == coeffs_size - 1){
+      //   gmp_printf("%d, %.2Ff\n", i, coeffs_mpf[i]);
+      // }
+    }
   }
 
   mpf_t fp_tmp;
   mpf_init(fp_tmp);
 
-  for (int i = 1; i < coeffs_size; i++) {
+  for (int i = 0; i < coeffs_size; i++) {
 
     mpf_t tmp, tmp2;
 
@@ -293,12 +306,11 @@ void compute_combined_intermediate_leakage_proba(uint64_t* coeffs, int k, int to
     mpf_pow_ui(tmp, tmp, i);
 
     mpf_init_set_d(tmp2, 1.0-p);
-    mpf_pow_ui(tmp2, tmp2, coeffs_size-i);
+    mpf_pow_ui(tmp2, tmp2, coeffs_size-1-i);
 
     mpf_mul(tmp, tmp, coeffs_mpf[i]);
     mpf_mul(tmp, tmp, tmp2);
-
-
+    
     mpf_add(fp_tmp, fp_tmp, tmp);
 
     mpf_clear(tmp);
@@ -319,10 +331,61 @@ void compute_combined_intermediate_leakage_proba(uint64_t* coeffs, int k, int to
   mpf_clear(tmp);
   mpf_clear(tmp2);
 
-  //gmp_printf("%.10Ff, ", fp_tmp);
-
-
   mpf_add(res, res, fp_tmp);
+}
 
-  //gmp_printf("intermediate f(%.2lf, %.2lf) = %.6Ff\n", p, f, res);
+
+void compute_combined_intermediate_mu(int k, int total, double f, mpf_t res){
+
+  mpf_t tmp, tmp2;
+
+  mpf_init_set_d(tmp, f);
+  mpf_pow_ui(tmp, tmp, k);
+
+  mpf_init_set_d(tmp2, 1.0-f);
+  mpf_pow_ui(tmp2, tmp2, total-k);
+
+  mpf_mul(tmp, tmp, tmp2);
+  mpf_add(res, res, tmp);
+
+  mpf_clear(tmp);
+  mpf_clear(tmp2);
+}
+
+void compute_combined_mu_max(int k, int total, double f, mpf_t res){
+  mpf_t tmp, tmp2, cf;
+
+  for(int i=k+1; i<= total;i++){
+
+    mpf_init(cf);
+    n_choose_k_gmp(i, total, cf);
+
+    mpf_init_set_d(tmp, f);
+    mpf_pow_ui(tmp, tmp, i);
+
+    mpf_init_set_d(tmp2, 1.0-f);
+    mpf_pow_ui(tmp2, tmp2, total-i);
+
+    mpf_mul(tmp, tmp, tmp2);
+    mpf_mul(tmp, tmp, cf);
+    mpf_add(res, res, tmp);
+
+    mpf_clear(cf);
+    mpf_clear(tmp);
+    mpf_clear(tmp2);
+  }
+}
+
+void compute_combined_final_proba(mpf_t epsilon, mpf_t mu){
+  mpf_t tmp;
+
+  // compute 1 / (1-mu)
+  mpf_init_set_d(tmp, 1);
+  mpf_sub (tmp, tmp, mu);
+  mpf_ui_div(tmp, 1, tmp);
+
+  mpf_mul(epsilon, epsilon, tmp);
+
+  mpf_clear(tmp);
+
 }
