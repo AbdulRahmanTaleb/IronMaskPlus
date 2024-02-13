@@ -632,13 +632,15 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
     for (int j = 0; j < share_count; j++) {
       if (left[i] & (1ULL << j)) {
         factorize_expr(factorized_deps, i*share_count+j, right,
-                       secret_count, first_rand_idx, non_mult_deps_count, corr_output_length,
+                       secret_count, first_rand_idx,
+                       non_mult_deps_count, corr_output_length,
                        corr_output_first_idx, c->deps->deps_size);
 
       } else if (right[i] & (1ULL << j)) {
 
         factorize_expr(factorized_deps, i*share_count+j, left,
-                       secret_count, first_rand_idx, non_mult_deps_count, corr_output_length,
+                       secret_count, first_rand_idx,
+                       non_mult_deps_count, corr_output_length,
                        corr_output_first_idx, c->deps->deps_size);
       }
     }
@@ -654,13 +656,15 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
     if (left[i]) {
 
       factorize_expr(factorized_deps, i-first_rand_idx+rand_offset, right,
-                     secret_count, first_rand_idx, non_mult_deps_count, corr_output_length,
+                     secret_count, first_rand_idx,
+                     non_mult_deps_count, corr_output_length,
                      corr_output_first_idx, c->deps->deps_size);
 
     } else if (right[i]) {
 
       factorize_expr(factorized_deps, i-first_rand_idx+rand_offset, left,
-                     secret_count, first_rand_idx, non_mult_deps_count, corr_output_length,
+                     secret_count, first_rand_idx,
+                     non_mult_deps_count, corr_output_length,
                      corr_output_first_idx, c->deps->deps_size);
     }
   }
@@ -675,13 +679,15 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
     if (left[i+corr_output_first_idx]) {
 
       factorize_expr(factorized_deps, i+corr_output_offset, right,
-                     secret_count, first_rand_idx, non_mult_deps_count, corr_output_length,
+                     secret_count, first_rand_idx,
+                     non_mult_deps_count, corr_output_length,
                      corr_output_first_idx, c->deps->deps_size);
 
     } else if (right[i+corr_output_first_idx]) {
 
       factorize_expr(factorized_deps, i+corr_output_offset, left,
-                  secret_count, first_rand_idx, non_mult_deps_count, corr_output_length,
+                  secret_count, first_rand_idx,
+                  non_mult_deps_count, corr_output_length,
                   corr_output_first_idx, c->deps->deps_size);
     }
   }
@@ -691,13 +697,15 @@ void factorize_inner_mults(const Circuit* c, BitDep** factorized_deps,
   int const_offset = inputs_real_count + c->random_count + c->deps->correction_outputs->length;
   if (left[c->deps->deps_size-1]) {
     factorize_expr(factorized_deps, const_offset, right,
-                     secret_count, first_rand_idx, non_mult_deps_count, corr_output_length,
+                     secret_count, first_rand_idx,
+                     non_mult_deps_count, corr_output_length,
                      corr_output_first_idx, c->deps->deps_size);
   } 
   const_offset++;
   if (right[c->deps->deps_size-1]) {
     factorize_expr(factorized_deps, const_offset, left,
-                     secret_count, first_rand_idx, non_mult_deps_count, corr_output_length,
+                     secret_count, first_rand_idx,
+                     non_mult_deps_count, corr_output_length,
                      corr_output_first_idx, c->deps->deps_size);
   }
 
@@ -734,10 +742,11 @@ void factorize_mults(const Circuit* c, BitDep** local_deps,
   for (int i = 0; i < local_deps_len; i++) {
     BitDep* dep = local_deps[i];
 
-    int has_i1_rand = dep->secrets[0];
-    int has_i2_rand = dep->secrets[1];
+    int has_i1_rand = 0; //dep->secrets[0];
+    int has_i2_rand = 0; //dep->secrets[1];
     int has_out_rand = 0;
     for (int j = 0; j < bit_rand_len; j++) {
+      // printf("%"PRId64", %"PRId64", %"PRId64"\n",bit_i1_rands[j], bit_i2_rands[j], bit_out_rands[j] );
       if (dep->randoms[j] & bit_i1_rands[j]) {
         has_i1_rand = 1;
         break;
@@ -1268,12 +1277,12 @@ int _verify_tuples(const Circuit* circuit, // The circuit
       //   for (int k = 0; k < bit_correction_outputs_len; k++){
       //     printf("%" PRId64 " ", local_deps[h]->correction_outputs[k]);
       //   }
-      //   printf("] -- gauss_rand = %"PRId64"\n", deps_rands_fact[h].mask);
+      //   printf("] -- gauss_rand = %"PRId64"\n", gauss_rands[h].mask);
       
       // }
-      // printf("\n");
+      // // printf("\n");
 
-      // printf("FACTORISING %s\n", circuit->deps->names[curr_comb[0]]);
+      // printf("FACTORISING %s\n\n", circuit->deps->names[curr_comb[0]]);
 
       int first_invalid_mult_index_in_local_deps_fact =
         tuple_to_local_deps_map[first_invalid_mult_index_fact];
@@ -2122,7 +2131,6 @@ static int is_failure_with_randoms_freeSNI_IOS(const Circuit* circuit,
   if (comb_free_space == 0) return 0;
 
   DependencyList* deps = circuit->deps;
-  int secret_count = circuit->secret_count;
   int random_count = circuit->random_count;
   int mult_count = deps->mult_deps->length;
   int non_mult_deps_count = circuit->deps->first_mult_idx;
@@ -2450,4 +2458,5 @@ int _verify_tuples_freeSNI_IOS(const Circuit* circuit, // The circuit
 
   return failure_count;
 }
+
 

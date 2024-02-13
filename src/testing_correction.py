@@ -305,15 +305,15 @@ def main():
             res = res + ((f**(len(s))) * (1-f)**(length-len(s)))
         print("mu = ",res) 
 
-    # file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.s)+"_"+str(args.p), "w")
-    # file.write(str(len(scenarios)) +  "\n")
-    # for s in scenarios:
-    #     line = str(len(s))+", "
-    #     for e in s[:-1]:
-    #         line = line + e + ", "
-    #     line = line + s[-1]
-    #     file.write(line+"\n")
-    # file.close()
+        file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.s)+"_"+str(args.p), "w")
+        file.write(str(len(scenarios)) +  "\n")
+        for s in scenarios:
+            line = str(len(s))+", "
+            for e in s[:-1]:
+                line = line + e + ", "
+            line = line + s[-1]
+            file.write(line+"\n")
+        file.close()
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include <inttypes.h>
 
 #include "circuit.h"
 #include "vectors.h"
@@ -61,17 +60,17 @@ void compute_rands_usage(Circuit* c) {
   int first_rand_idx = deps->first_rand_idx;
   int nb_rands = c->random_count;
   int mult_count = c->deps->mult_deps->length;
-  int non_mult_deps_count = c->deps->first_mult_idx;
 
-  bool* i1_rands  = calloc(nb_rands, sizeof(*i1_rands));
-  bool* i2_rands  = calloc(nb_rands, sizeof(*i2_rands));
-  bool* out_rands = calloc(nb_rands, sizeof(*out_rands));
+  int non_mult_deps_count = c->secret_count + c->random_count;
+  bool* i1_rands  = calloc(non_mult_deps_count, sizeof(*i1_rands));
+  bool* i2_rands  = calloc(non_mult_deps_count, sizeof(*i2_rands));
+  bool* out_rands = calloc(non_mult_deps_count, sizeof(*out_rands));
   bool has_input_rands = false;
 
   // Slightly weird to put input 1 and 2 here since they are not
   // randoms, but it simplifies the code later..
-  // i1_rands[0] = 1;
-  // i2_rands[1] = 1;
+  i1_rands[0] = 1;
+  i2_rands[1] = 1;
 
   // We iterate over each probe (dependency), and, if they contain a
   // random, we check what else it contains:
@@ -87,13 +86,13 @@ void compute_rands_usage(Circuit* c) {
 
     if (dep[0]) {
       for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
-        i1_rands[j-first_rand_idx] |= dep[j];
+        i1_rands[j] |= dep[j];
         if (dep[j]) has_input_rands = true;
       }
     }
     if ((c->secret_count>1) &&  (dep[1])) {
       for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
-        i2_rands[j-first_rand_idx] |= dep[j];
+        i2_rands[j] |= dep[j];
         if (dep[j]) has_input_rands = true;
       }
     }
@@ -104,7 +103,7 @@ void compute_rands_usage(Circuit* c) {
       // and hence out_rands is updated (e.g. an output share).
       if (dep[k]) {
         for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
-          out_rands[j-first_rand_idx] |= dep[j];
+          out_rands[j] |= dep[j];
         }
         break;
       }
@@ -142,22 +141,22 @@ void compute_rands_usage(Circuit* c) {
   for (int i = 0; i < deps->length; i++) {
     Dependency* dep = deps->deps_exprs[i];
     for (int j = first_rand_idx; j < first_rand_idx+nb_rands; j++) {
-      if (dep[j] && !i1_rands[j-first_rand_idx] && !i2_rands[j-first_rand_idx] && !out_rands[j-first_rand_idx]) {
+      if (dep[j] && !i1_rands[j] && !i2_rands[j] && !out_rands[j]) {
         // The random i does not have a group yet -> searching for
         // other randoms in the dependency (one of them should have a
         // group).
         for (int k = first_rand_idx; k < first_rand_idx+nb_rands; k++) {
           br = false;
-          if (dep[k] && i1_rands[k-first_rand_idx]) {
-            i1_rands[j-first_rand_idx] |= dep[j];
+          if (dep[k] && i1_rands[k]) {
+            i1_rands[j] |= dep[j];
             br = true;
           } 
-          if (dep[k] && i2_rands[k-first_rand_idx]) {
-            i2_rands[j-first_rand_idx] |= dep[j];
+          if (dep[k] && i2_rands[k]) {
+            i2_rands[j] |= dep[j];
             br = true;
           } 
-          if (dep[k] && out_rands[k-first_rand_idx]) {
-            out_rands[j-first_rand_idx] |= dep[j];
+          if (dep[k] && out_rands[k]) {
+            out_rands[j] |= dep[j];
             br = true;
           }
           if(br) break;
@@ -167,7 +166,7 @@ void compute_rands_usage(Circuit* c) {
   }
 
 
-  for(int i=0; i<nb_rands; i++){
+  for(int i=first_rand_idx; i<non_mult_deps_count; i++){
     int cpt = 0;
     if(i1_rands[i]) cpt++;
     if(i2_rands[i]) cpt++;
@@ -261,7 +260,7 @@ void _update_contained_secrets(Dependency** contained_secrets, int idx, Dependen
 // Computes |c->deps->contained_secrets|, ie, which secret shares are
 // in each variable.
 void compute_contained_secrets(Circuit* c, int ** temporary_mult_idx) {
-  int non_mult_deps_count = c->deps->first_mult_idx;
+  int non_mult_deps_count = c->secret_count + c->random_count;
 
   Dependency** contained_secrets = malloc(c->deps->length * sizeof(*contained_secrets));
   for (int i = 0; i < c->deps->length; i++) {
@@ -307,10 +306,9 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
   BitDepVector** bit_deps = malloc(deps->length * sizeof(*bit_deps));
 
   int secret_count = circuit->secret_count;
-  int random_count = circuit->random_count;
-  int first_rand_idx = circuit->deps->first_rand_idx;
+  int random_count = circuit->random_count + secret_count;
   int mult_count   = deps->mult_deps->length;
-  int non_mult_deps_count = circuit->deps->first_mult_idx;
+  int non_mult_deps_count = random_count;
 
   int corr_first_idx = deps->first_correction_idx;
   int corr_outputs_count = deps->correction_outputs->length;
@@ -332,9 +330,9 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
       // is really desirable though.
       for (int k = 0; k < bit_rand_len; k++) {
         for (int l = 0; l < 64; l++) {
-          // if (k*64+l < secret_count) continue;
+          if (k*64+l < secret_count) continue;
           if (k*64+l >= random_count) continue;
-          if (dep->content[j][k*64+l+first_rand_idx]) {
+          if (dep->content[j][k*64+l]) {
             bit_dep->randoms[k] |= 1ULL << l;
           }
         }
@@ -380,9 +378,9 @@ void compute_bit_deps(Circuit* circuit, int ** temporary_mult_idx) {
 
         for (int k = 0; k < bit_rand_len; k++) {
           for (int l = 0; l < 64; l++) {
-            // if (k*64+l < secret_count) continue;
+            if (k*64+l < secret_count) continue;
             if (k*64+l >= random_count) continue;
-            if (dep->content[j][k*64+l+first_rand_idx]) {
+            if (dep->content[j][k*64+l]) {
               bit_dep->randoms[k] |= 1ULL << l;
             }
           }
@@ -480,7 +478,7 @@ void compute_total_correction_bit_deps(Circuit * circuit){
     return;
   }
 
-  int bit_rand_len = 1 + (circuit->random_count) / 64;
+  int bit_rand_len = 1 + (circuit->random_count + circuit->secret_count) / 64;
   int bit_mult_len = (circuit->deps->mult_deps->length == 0) ? 0 :  1 + circuit->deps->mult_deps->length / 64;
   int bit_correction_outputs_len = (corr_outputs_count == 0) ? 0 : 1 + corr_outputs_count / 64;
   BitDepVector ** correction_outputs_deps_bits = circuit->deps->correction_outputs->correction_outputs_deps_bits;
@@ -556,12 +554,6 @@ void print_circuit(const Circuit* c) {
         printf("%d ", deps->deps[i]->content[j][k]);
       }
       printf(", ");
-      if(c->faults_on_inputs){
-        for (int k = c->secret_count; k < c->deps->first_rand_idx; k++) {
-          printf("%d ", deps->deps[i]->content[j][k]);
-        }
-        printf(", ");
-      }
       for (int k = c->deps->first_rand_idx; k < c->deps->first_rand_idx+c->random_count; k++) {
         printf("%d ", deps->deps[i]->content[j][k]);
       }
@@ -595,20 +587,18 @@ void print_circuit(const Circuit* c) {
              mult_deps->deps[i]->idx_same_dependencies);
     }
 
-    int non_mult_deps_count = c->deps->first_mult_idx;
+    int non_mult_deps_count = c->secret_count + c->random_count;
     int refresh_i1 = 0, refresh_i2 = 0, refresh_out = 0;
-    for (int i = 0; i < c->random_count; i++) {
+    for (int i = deps->first_rand_idx; i < non_mult_deps_count; i++) {
       refresh_i1 += c->i1_rands[i];
       refresh_i2 += c->i2_rands[i];
       refresh_out += c->out_rands[i];
     }
 
     printf("\nRandoms:\n");
-    for(int i=0; i<c->random_count; i++){
+    for(int i=deps->first_rand_idx; i<non_mult_deps_count; i++){
       printf("%d, %d, %d\n", c->i1_rands[i], c->i2_rands[i], c->out_rands[i]);
     }
-
-    printf("\nrand bit deps[0]: %"PRId64", %"PRId64", %"PRId64"\n", c->bit_i1_rands[0], c->bit_i2_rands[0], c->bit_out_rands[0]);
 
     printf("\nRefreshes: %d on input 1, %d on input 2, %d on output.\n\n",
            refresh_i1, refresh_i2, refresh_out);

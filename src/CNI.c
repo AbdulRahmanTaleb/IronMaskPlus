@@ -22,7 +22,7 @@ struct callback_data {
 
 static int generate_names(ParsedFile * pf, char *** names_ptr){
 
-  int length = pf->nb_duplications * pf->shares * pf->in->next_val + pf->randoms->next_val + pf->eqs->size;
+  int length = pf->randoms->next_val + pf->eqs->size;
   // we don't need to consider faults on output shares
   length = length - pf->nb_duplications * pf->shares * pf->out->next_val;
 
@@ -45,19 +45,19 @@ static int generate_names(ParsedFile * pf, char *** names_ptr){
   char ** names = *names_ptr;
 
   idx = 0;
-  StrMapElem * elem = pf->in->head;
-  while(elem){
-    for(int i=0; i<pf->shares; i++){
-      for(int j=0; j<pf->nb_duplications; j++){
-        names[idx] = malloc(10 * sizeof(*names[idx]));
-        sprintf(names[idx], "%s%d_%d", elem->key, i, j);
-        idx++;
-      }
-    }
-    elem = elem->next;
-  }
+  // StrMapElem * elem = pf->in->head;
+  // while(elem){
+  //   for(int i=0; i<pf->shares; i++){
+  //     for(int j=0; j<pf->nb_duplications; j++){
+  //       names[idx] = malloc(10 * sizeof(*names[idx]));
+  //       sprintf(names[idx], "%s%d_%d", elem->key, i, j);
+  //       idx++;
+  //     }
+  //   }
+  //   elem = elem->next;
+  // }
 
-  elem = pf->randoms->head;
+  StrMapElem * elem = pf->randoms->head;
   while(elem){
     names[idx] = strdup(elem->key);
     idx++;
@@ -146,6 +146,7 @@ int compute_CNI(ParsedFile * pf, int cores, int t, int k) {
         v[j] = malloc(sizeof(*v[j]));
         v[j]->set = false;
         v[j]->name = names[comb[j]];
+        v[j]->fault_on_input = false;
       }
 
       fv->vars = v;

@@ -28,7 +28,7 @@ struct callback_data {
 static int generate_names(ParsedFile * pf, char *** names_ptr){
   int length = pf->randoms->next_val + pf->eqs->size;
   
-  *names_ptr = malloc(length * sizeof(*names_ptr));
+  *names_ptr = malloc(length * sizeof(**names_ptr));
   char ** names = *names_ptr;
 
   int idx = 0;
@@ -72,6 +72,7 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, bool s
 
   char ** names;
   int length = generate_names(pf, &names);
+  // length = 2;
 
   Circuit * c = gen_circuit(pf, pf->glitch, pf->transition, NULL);
   int total_wires = c->total_wires;
@@ -118,6 +119,7 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, bool s
         v[j] = malloc(sizeof(*v[j]));
         v[j]->set = set;
         v[j]->name = names[comb[j]];
+        v[j]->fault_on_input = false;
       }
 
       fv->vars = v;

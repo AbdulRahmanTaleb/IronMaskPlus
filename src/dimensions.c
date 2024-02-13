@@ -711,7 +711,7 @@ bool _is_elementary_multiplication(Circuit * circuit, MultDependency * mult_dep)
 bool is_elementary(Circuit* circuit, Dependency* dep) {
   DependencyList* deps    = circuit->deps;
   int first_rand_idx      = deps->first_rand_idx;
-  int non_mult_deps_count = circuit->secret_count + circuit->random_count;
+  int non_mult_deps_count = circuit->deps->first_mult_idx;
 
   // make sure it does not contain any random values
   for (int i = first_rand_idx; i < non_mult_deps_count; i++) {

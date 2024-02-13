@@ -98,6 +98,7 @@ typedef struct _circuit {
   int* weights;        // Array of size |circuit_length|
   int contains_mults;  // 1 if the circuit contains multiplications, 0 otherwise
   int total_wires;     // Total number of wires
+  bool faults_on_inputs;
 
   // The following 3 members are arrays of size deps->deps_size, where
   // a cell at 1 (resp. 0) indicates that the random at this index is
@@ -121,6 +122,9 @@ typedef struct _circuit {
 typedef struct _faulted_var{
   char * name;
   bool set;
+  bool fault_on_input;
+  int share;
+  int duplicate;
 }FaultedVar;
 
 typedef struct _faults_struct{
