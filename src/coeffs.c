@@ -306,7 +306,7 @@ void compute_combined_intermediate_leakage_proba(uint64_t* coeffs, int k, int to
     mpf_pow_ui(tmp, tmp, i);
 
     mpf_init_set_d(tmp2, 1.0-p);
-    mpf_pow_ui(tmp2, tmp2, coeffs_size-1-i);
+    mpf_pow_ui(tmp2, tmp2, coeffs_size-i);
 
     mpf_mul(tmp, tmp, coeffs_mpf[i]);
     mpf_mul(tmp, tmp, tmp2);

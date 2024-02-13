@@ -26,24 +26,13 @@ struct callback_data {
 
 static int generate_names(ParsedFile * pf, char *** names_ptr){
 
-  int length = pf->randoms->next_val + pf->eqs->size + pf->shares * pf->nb_duplications * pf->in->next_val;
+  int length = pf->randoms->next_val + pf->eqs->size;
+  
   *names_ptr = malloc(length * sizeof(*names_ptr));
   char ** names = *names_ptr;
 
   int idx = 0;
-  StrMapElem * elem = pf->in->head;
-  while(elem){
-    for(int i=0; i<pf->shares; i++){
-      for(int j=0; j<pf->nb_duplications; j++){
-        names[idx] = malloc(10 * sizeof(*names[idx]));
-        sprintf(names[idx], "%s%d_%d", elem->key, i, j);
-        idx++;
-      }
-    }
-    elem = elem->next;
-  }
-
-  elem = pf->randoms->head;
+  StrMapElem * elem = pf->randoms->head;
   while(elem){
     names[idx] = strdup(elem->key);
     idx++;
@@ -58,6 +47,24 @@ static int generate_names(ParsedFile * pf, char *** names_ptr){
   }
 
   return length;
+}
+
+static int generate_input_names(ParsedFile * pf, char *** input_names){
+  int input_length = pf->shares * pf->nb_duplications * pf->in->next_val;
+  *input_names = malloc(input_length * sizeof(*input_names));
+  int idx = 0;
+  StrMapElem * elem = pf->in->head;
+  while(elem){
+    for(int i=0; i<pf->shares; i++){
+      for(int j=0; j<pf->nb_duplications; j++){
+        *input_names[idx] = malloc(10 * sizeof(**input_names[idx]));
+        sprintf(*input_names[idx], "%s%d_%d", elem->key, i, j);
+        idx++;
+      }
+    }
+    elem = elem->next;
+  }
+  return input_length;
 }
 
 static void update_coeffs(const Circuit* c, Comb* comb, int comb_len, SecretDep* secret_deps,
@@ -116,6 +123,9 @@ void compute_CRPC_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, int t
   char ** names;
   int length = generate_names(pf, &names);
 
+  char ** input_names;
+  int input_length = generate_input_names(pf, &input_names);
+
   Circuit * c = gen_circuit(pf, pf->glitch, pf->transition, NULL);
   int total_wires = c->total_wires;
 
@@ -168,70 +178,86 @@ void compute_CRPC_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, int t
       }
       printf("...\n");
 
-      FaultedVar ** v = malloc(i * sizeof(*v));
+      FaultedVar ** v = malloc((i+1) * sizeof(*v));
       for(int j=0; j<i; j++){
         v[j] = malloc(sizeof(*v[j]));
         v[j]->set = set;
         v[j]->name = names[comb[j]];
       }
       fv->vars = v;
+      fv->length = i;
 
       if(ignore_faulty_scenario(fv, fc)){
         printf("Ignoring...\n");
         cpt_ignored++;
         goto skip;
       }
+      fv->length = i+1;
+      fv->vars[i] = malloc(sizeof(*fv->vars[i]));
+      fv->vars[i]->set = set;
 
       uint64_t * coeffs = calloc(c->total_wires+1, sizeof(*coeffs));
-      for (unsigned i = 0; i < out_comb_len; i++) {
-        memset(coeffs_out_comb[i], 0, (total_wires + 1) *  sizeof(*coeffs_out_comb[i]));
-      }
 
-      Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, fv);
-      //print_circuit(circuit);
+      for(int inp=0; inp<input_length; inp++){
+        fv->vars[i]->name = input_names[inp];
 
-      for (int size = 0; size <= coeff_max; size++) {
-
-        for (unsigned int l = 0; l < out_comb_len; l++) {
-          construct_output_prefix(circuit, pf->out, out_comb_arr[l], out_comb, t);
-          verif_prefix.content = out_comb;
-          data.coeffs = coeffs_out_comb[l];
-          // for(int m=0; m< t*c->nb_duplications; m++){
-          //   printf("%d, ", out_comb[m]);
-          // }
-          // printf("\n");
-
-          find_all_failures(circuit,
-                        cores,
-                        (t == circuit->share_count) ? t-1 : t, // t_in
-                        &verif_prefix,  // prefix
-                        size+verif_prefix.length, // comb_len
-                        size+verif_prefix.length, // max_len
-                        NULL,  // dim_red_data
-                        true,  // has_random
-                        NULL,  // first_comb
-                        false, // include_outputs
-                        0,     // shares_to_ignore
-                        false, // PINI
-                        NULL, // incompr_tuples
-                        update_coeffs,
-                        (void*)&data);
-
-          #define max(a,b) ((a) > (b) ? (a) : (b))
-          coeffs[size] = max(coeffs[size], coeffs_out_comb[l][size]);
-          //printf("coeff = %lu\n", coeffs_out_comb[l][size]);
-
+        uint64_t * coeffs_per_inp = calloc(c->total_wires+1, sizeof(*coeffs));
+        for (unsigned i = 0; i < out_comb_len; i++) {
+          memset(coeffs_out_comb[i], 0, (total_wires + 1) *  sizeof(*coeffs_out_comb[i]));
         }
-      }
 
-      for (int i = coeff_max+1; i <= circuit->total_wires; i++) {
-        for (unsigned j = 0; j < out_comb_len; j++) {
-          coeffs[i] = max(coeffs[i], coeffs_out_comb[j][i]);
+        Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, fv);
+        //print_circuit(circuit);
+
+        for (int size = 0; size <= coeff_max; size++) {
+
+          for (unsigned int l = 0; l < out_comb_len; l++) {
+            construct_output_prefix(circuit, pf->out, out_comb_arr[l], out_comb, t);
+            verif_prefix.content = out_comb;
+            data.coeffs = coeffs_out_comb[l];
+            // for(int m=0; m< t*c->nb_duplications; m++){
+            //   printf("%d, ", out_comb[m]);
+            // }
+            // printf("\n");
+
+            find_all_failures(circuit,
+                          cores,
+                          (t == circuit->share_count) ? t-1 : t, // t_in
+                          &verif_prefix,  // prefix
+                          size+verif_prefix.length, // comb_len
+                          size+verif_prefix.length, // max_len
+                          NULL,  // dim_red_data
+                          true,  // has_random
+                          NULL,  // first_comb
+                          false, // include_outputs
+                          0,     // shares_to_ignore
+                          false, // PINI
+                          NULL, // incompr_tuples
+                          update_coeffs,
+                          (void*)&data);
+
+            #define max(a,b) ((a) > (b) ? (a) : (b))
+            coeffs_per_inp[size] = max(coeffs_per_inp[size], coeffs_out_comb[l][size]);
+            //printf("coeff = %lu\n", coeffs_out_comb[l][size]);
+
+          }
         }
+
+        for (int m = coeff_max+1; m <= circuit->total_wires; m++) {
+          for (unsigned j = 0; j < out_comb_len; j++) {
+            coeffs_per_inp[m] = max(coeffs_per_inp[m], coeffs_out_comb[j][m]);
+          }
+        }
+
+        for (int m = 0; m <= circuit->total_wires; m++) {
+          coeffs[m] = max(coeffs[m], coeffs_per_inp[m]);
+        }
+
+        free(coeffs_per_inp);
+        free_circuit(circuit);
       }
 
       fwrite(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
-      free_circuit(circuit);
       free(coeffs);
 
       skip:;
@@ -242,59 +268,86 @@ void compute_CRPC_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, int t
     free(comb);
   }
 
+  // add non faulty circuit
+  printf("################ Cheking CRPC without intermediate faults\n");
+  uint64_t * coeffs = calloc(c->total_wires+1, sizeof(*coeffs));
+  FaultedVar ** v = malloc(1 * sizeof(*v));
+  v[0] = malloc(sizeof(*v[0]));
+  v[0]->set = set;
+  fv->vars = v;
+  fv->length = 1;
+  for(int inp=0; inp<input_length; inp++){
+    
+    fv->vars[0]->name = input_names[inp];
+
+    uint64_t * coeffs_per_inp = calloc(c->total_wires+1, sizeof(*coeffs));
+    for (unsigned i = 0; i < out_comb_len; i++) {
+      memset(coeffs_out_comb[i], 0, (total_wires + 1) *  sizeof(*coeffs_out_comb[i]));
+    }
+
+    Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, fv);
+    //print_circuit(circuit);
+
+    for (int size = 0; size <= coeff_max; size++) {
+
+      for (unsigned int l = 0; l < out_comb_len; l++) {
+        construct_output_prefix(circuit, pf->out, out_comb_arr[l], out_comb, t);
+        verif_prefix.content = out_comb;
+        data.coeffs = coeffs_out_comb[l];
+        // for(int m=0; m< t*c->nb_duplications; m++){
+        //   printf("%d, ", out_comb[m]);
+        // }
+        // printf("\n");
+
+        find_all_failures(circuit,
+                      cores,
+                      (t == circuit->share_count) ? t-1 : t, // t_in
+                      &verif_prefix,  // prefix
+                      size+verif_prefix.length, // comb_len
+                      size+verif_prefix.length, // max_len
+                      NULL,  // dim_red_data
+                      true,  // has_random
+                      NULL,  // first_comb
+                      false, // include_outputs
+                      0,     // shares_to_ignore
+                      false, // PINI
+                      NULL, // incompr_tuples
+                      update_coeffs,
+                      (void*)&data);
+
+        #define max(a,b) ((a) > (b) ? (a) : (b))
+        coeffs_per_inp[size] = max(coeffs_per_inp[size], coeffs_out_comb[l][size]);
+        //printf("coeff = %lu\n", coeffs_out_comb[l][size]);
+
+      }
+    }
+
+    for (int m = coeff_max+1; m <= circuit->total_wires; m++) {
+      for (unsigned j = 0; j < out_comb_len; j++) {
+        coeffs_per_inp[m] = max(coeffs_per_inp[m], coeffs_out_comb[j][m]);
+      }
+    }
+
+    for (int m = 0; m <= circuit->total_wires; m++) {
+      coeffs[m] = max(coeffs[m], coeffs_per_inp[m]);
+    }
+
+    free(coeffs_per_inp);
+    free_circuit(circuit);
+  }
+
+  fwrite(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
+  free(coeffs);
+
+  for(int inp=0; inp<input_length; inp++){
+    free(input_names[inp]);
+  }
+  free(input_names);
+  free(fv);
   for(int i=0; i<length; i++){
     free(names[i]);
   }
   free(names);
-  free(fv);
-
-  // add non faulty circuit
-  printf("################ Cheking CRPC without faults\n");
-  uint64_t * coeffs = calloc(c->total_wires+1, sizeof(*coeffs));
-  for (unsigned i = 0; i < out_comb_len; i++) {
-    memset(coeffs_out_comb[i], 0, (total_wires + 1) *  sizeof(*coeffs_out_comb[i]));
-  }
-  Circuit * circuit = gen_circuit(pf, pf->glitch, pf->transition, NULL);
-  //print_circuit(circuit);
-  for (int size = 0; size <= coeff_max; size++) {
-
-
-    for (unsigned int l = 0; l < out_comb_len; l++) {
-      construct_output_prefix(circuit, pf->out, out_comb_arr[l], out_comb, t);
-      verif_prefix.content = out_comb;
-      data.coeffs = coeffs_out_comb[l];
-
-      find_all_failures(circuit,
-                    cores,
-                    (t == circuit->share_count) ? t-1 : t, // t_in
-                    &verif_prefix,  // prefix
-                    size+verif_prefix.length, // comb_len
-                    size+verif_prefix.length, // max_len
-                    NULL,  // dim_red_data
-                    true,  // has_random
-                    NULL,  // first_comb
-                    false, // include_outputs
-                    0,     // shares_to_ignore
-                    false, // PINI
-                    NULL, // incompr_tuples
-                    update_coeffs,
-                    (void*)&data);
-
-      #define max(a,b) ((a) > (b) ? (a) : (b))
-      coeffs[size] = max(coeffs[size], coeffs_out_comb[l][size]);
-      //printf("coeff = %lu\n", coeffs_out_comb[l][size]);
-
-    }
-  }
-  for (int i = coeff_max+1; i <= circuit->total_wires; i++) {
-    for (unsigned j = 0; j < out_comb_len; j++) {
-      coeffs[i] = max(coeffs[i], coeffs_out_comb[j][i]);
-    }
-  }
-
-  fwrite(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
-  free_circuit(circuit);
-  free(coeffs);
 
   printf("Ignored %d combs\n", cpt_ignored);
   free_faults_combs(fc);
@@ -332,21 +385,6 @@ void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak
   uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
   mpf_t res;
   mpf_init(res);
-
-  // int input_length = pf->shares * pf->nb_duplications * pf->in->next_val;
-  // char** input_names = malloc(input_length * sizeof(*input_names));
-  // int idx = 0;
-  // StrMapElem * elem = pf->in->head;
-  // while(elem){
-  //   for(int i=0; i<pf->shares; i++){
-  //     for(int j=0; j<pf->nb_duplications; j++){
-  //       input_names[idx] = malloc(10 * sizeof(*input_names[idx]));
-  //       sprintf(input_names[idx], "%s%d_%d", elem->key, i, j);
-  //       idx++;
-  //     }
-  //   }
-  //   elem = elem->next;
-  // }
 
   int cpt = 0;
   int cpt_ignored = 0;
