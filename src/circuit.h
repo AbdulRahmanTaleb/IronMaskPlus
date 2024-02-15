@@ -17,6 +17,10 @@ typedef DEPENDENCY_TYPE Dependency;
 #define BITMULT_MAX_LEN 7 // Enough to store 64*7 = 448 = 21*21 -->
                           // multiplication gadgets up to order 21
 #define BITCORRECTION_OUTPUTS_MAX_LEN 7
+#define BITDUPLICATE_SECRETS_MAX_LEN 20 // Enough for gadgets with 2 inputs of 10 shares,
+                                        // this field is only useful in case of faults and
+                                        // correction gadgets, so we can't verify gadgets this
+                                        // big anyway
 
 // The BitDep structure is a more compact representation of
 // dependencies: instead of using a array of Dependency, where most
@@ -25,6 +29,7 @@ typedef DEPENDENCY_TYPE Dependency;
 // multiplications.
 typedef struct _bitDep {
   Dependency secrets[2];
+  Dependency duplicate_secrets[BITDUPLICATE_SECRETS_MAX_LEN];
   uint64_t randoms[RANDOMS_MAX_LEN];
   uint64_t mults[BITMULT_MAX_LEN];
   uint64_t correction_outputs[BITCORRECTION_OUTPUTS_MAX_LEN];

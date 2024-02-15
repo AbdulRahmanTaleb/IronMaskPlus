@@ -25,6 +25,45 @@ struct callback_data {
 };
 
 
+FaultsCombs * read_faulty_scenarios(ParsedFile * pf, int k, bool set){
+  char *name = malloc(strlen(pf->filename) + 50);
+  sprintf(name, "%s_faulty_scenarios_k%d_f%d_CRP", pf->filename, k, set ? 1 : 0);
+  FILE * f = fopen(name, "r");
+  
+  if(!f){
+    fprintf(stderr, "You must execute the testing_correction.py first on your gadget to generate the %s file.\n", name);
+    free(name);
+    exit(EXIT_FAILURE);
+  }
+  free(name);
+  int length;
+  fscanf(f, " %d", &length);
+  if(length == 0){
+    return NULL;
+  }
+
+  FaultsCombs * sfc = malloc(sizeof(*sfc));
+  sfc->length = length;
+  sfc->fc = malloc(length * sizeof(*sfc->fc));
+  FaultsComb ** fc = sfc->fc;
+
+  for(int i=0; i<length; i++){
+    fc[i] = malloc(sizeof(*fc[i]));
+    fscanf(f, " %d ,", &fc[i]->length);
+    fc[i]->names = malloc(fc[i]->length * sizeof(*fc[i]->names));
+
+    for(int j=0; j< fc[i]->length-1; j++){
+      fc[i]->names[j] = malloc(60 * sizeof(*fc[i]->names[j]));
+      fscanf(f, " %[^,],", fc[i]->names[j]);
+    }
+
+    fc[i]->names[fc[i]->length-1] = malloc(60 * sizeof(*fc[i]->names[fc[i]->length-1]));
+    fscanf(f, " %s\n", fc[i]->names[fc[i]->length-1]);
+  }
+
+  return sfc;
+}
+
 static int generate_names(ParsedFile * pf, char *** names_ptr){
   int length = pf->randoms->next_val + pf->eqs->size;
   
@@ -86,10 +125,7 @@ void compute_CRP_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, bool s
 
   free_circuit(c);
 
-  char * prop = malloc(4 *sizeof(*prop));
-  sprintf(prop, "CRP");
-  FaultsCombs * fc = read_faulty_scenarios(pf, k, set, prop);
-  free(prop);
+  FaultsCombs * fc = read_faulty_scenarios(pf, k, set);
 
   Faults * fv = malloc(sizeof(*fv));
   fv->length = k;
@@ -254,7 +290,7 @@ void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double
 
   char * prop = malloc(4 *sizeof(*prop));
   sprintf(prop, "CRP");
-  FaultsCombs * fc = read_faulty_scenarios(pf, k, set, prop);
+  FaultsCombs * fc = read_faulty_scenarios(pf, k, set);
   free(prop);
 
   Faults * fv = malloc(sizeof(*fv));

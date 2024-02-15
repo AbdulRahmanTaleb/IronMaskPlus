@@ -402,47 +402,6 @@ void print_dep_map(DepMap* map, int deps_size) {
 } 
 
 
-
-FaultsCombs * read_faulty_scenarios(ParsedFile * pf, int k, bool set, char * property){
-  char *name = malloc(strlen(pf->filename) + 50);
-  sprintf(name, "%s_faulty_scenarios_k%d_f%d_%s", pf->filename, k, set ? 1 : 0, property);
-  FILE * f = fopen(name, "r");
-  
-  if(!f){
-    fprintf(stderr, "You must execute the testing_correction.py first on your gadget to generate the %s file.\n", name);
-    free(name);
-    exit(EXIT_FAILURE);
-  }
-  free(name);
-  int length;
-  fscanf(f, " %d", &length);
-  if(length == 0){
-    return NULL;
-  }
-
-  FaultsCombs * sfc = malloc(sizeof(*sfc));
-  sfc->length = length;
-  sfc->fc = malloc(length * sizeof(*sfc->fc));
-  FaultsComb ** fc = sfc->fc;
-
-  for(int i=0; i<length; i++){
-    fc[i] = malloc(sizeof(*fc[i]));
-    fscanf(f, " %d ,", &fc[i]->length);
-    fc[i]->names = malloc(fc[i]->length * sizeof(*fc[i]->names));
-
-    for(int j=0; j< fc[i]->length-1; j++){
-      fc[i]->names[j] = malloc(60 * sizeof(*fc[i]->names[j]));
-      fscanf(f, " %[^,],", fc[i]->names[j]);
-    }
-
-    fc[i]->names[fc[i]->length-1] = malloc(60 * sizeof(*fc[i]->names[fc[i]->length-1]));
-    fscanf(f, " %s\n", fc[i]->names[fc[i]->length-1]);
-  }
-
-  return sfc;
-}
-
-
 void free_faults_combs(FaultsCombs * fc){
   if(!fc) return;
   for(int i=0; i< fc->length; i++){

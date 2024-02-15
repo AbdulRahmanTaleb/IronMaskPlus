@@ -197,12 +197,14 @@ class Circuit:
             names.append(self.inputs[input_idx] + "_" + str(j))
         
         new_combs = []
-        for comb in itertools.combinations(names, capacity):
-            if(len(combs) == 0):
-                new_combs.append(list(comb))
-            else:
-                for c in combs:
-                    new_combs.append(list(c) + list(comb))
+        new_combs.append([])
+        for  cap in range(1,capacity+1):
+            for comb in itertools.combinations(names, cap):
+                if(len(combs) == 0):
+                    new_combs.append(list(comb))
+                else:
+                    for c in combs:
+                        new_combs.append(list(c) + list(comb))
 
         return new_combs
 
@@ -210,7 +212,38 @@ class Circuit:
     def get_input_combs(self):
         return self.get_input_comb_rec(0)
 
-    def get_uncorrected_faulty_combs(self, k, property, set):
+    def get_uncorrected_faulty_combs_CRP(self, k, set):
+        names = []
+        for e in self.eqs:
+            names.append(e.dst)
+        for e in self.randoms:
+            names.append(e)
+        for e in self.eqs_outputs:
+            names.append(e.dst)
+
+        length = len(self.eqs) + len(self.randoms) + len(self.eqs_outputs)
+    
+        scenarios = []
+        for i in range(1,k+1):
+            print("Testing combinations of ", i," faults...")
+            for comb in itertools.combinations(names, i):
+                comb_rands = []
+                for c in comb:
+                    if(c in self.randoms):
+                        comb_rands.append(c)
+
+                if(len(comb_rands) > 0):
+                    evaluate_over_R, evaluate_outputs_over_R = self.evaluate_circuit(comb_rands, set)
+                else:
+                    evaluate_outputs_over_R = self.evaluate_outputs_over_R
+
+                if(not(self.can_faulty_circuit_be_corrected(comb, set, evaluate_outputs_over_R))):
+                    scenarios.append(comb)
+
+        return length, scenarios
+
+
+    def get_uncorrected_faulty_combs_CRPC(self, k ,set):
         names = []
         for e in self.eqs:
             names.append(e.dst)
@@ -221,32 +254,16 @@ class Circuit:
 
         length = len(self.eqs) + len(self.randoms) + len(self.eqs_outputs)
 
-        if(property == "CRPC"):
-            input_combs = self.get_input_combs()
-            print("len input combs = ", len(input_combs))
+        input_combs = self.get_input_combs()
+        e = input_combs.pop(0)
+        assert(len(e) == 0)
+        print("len input combs = ", len(input_combs))
 
-        scenarios = []
-        if(property == "CRPC"):
-            for prefix in input_combs:
-                print(prefix)
-                sc = []
-                for i in range(1,k+1):
-                    for comb in itertools.combinations(names, i):
-                        comb_rands = []
-                        for c in comb:
-                            if(c in self.randoms):
-                                comb_rands.append(c)
-
-                        if(len(comb_rands) > 0):
-                            evaluate_over_R, evaluate_outputs_over_R = self.evaluate_circuit(comb_rands, set)
-                        else:
-                            evaluate_outputs_over_R = self.evaluate_outputs_over_R
-
-                        if(not(self.can_faulty_circuit_be_corrected(prefix + list(comb), set, evaluate_outputs_over_R))):
-                            sc.append(comb)
-                print(len(sc))
-                scenarios.append(sc)
-        else:
+        scenarios = dict()
+        l = 0
+        for prefix in input_combs:
+            print("########### Input faults = ", prefix)
+            sc = []
             for i in range(1,k+1):
                 print("Testing combinations of ", i," faults...")
                 for comb in itertools.combinations(names, i):
@@ -260,10 +277,13 @@ class Circuit:
                     else:
                         evaluate_outputs_over_R = self.evaluate_outputs_over_R
 
-                    if(not(self.can_faulty_circuit_be_corrected(comb, set, evaluate_outputs_over_R))):
-                        scenarios.append(comb)
+                    if(not(self.can_faulty_circuit_be_corrected(list(prefix) + list(comb), set, evaluate_outputs_over_R))):
+                        sc.append(comb)
 
-        return length, scenarios
+            scenarios[l] = sc
+            l += 1
+
+        return length, input_combs, scenarios
 
 
 
@@ -286,26 +306,10 @@ def main():
     if(args.s == 0):
         set = False
 
-    length, scenarios = c.get_uncorrected_faulty_combs(args.k, args.p, set)
+    if(args.p == "CRP"):
+        length, scenarios = c.get_uncorrected_faulty_combs_CRP(args.k, set)
 
-    f = 0.01
-    if(property == "CRPC"):
-        print(length)
-        res = 0
-        for sc in scenarios:
-            inter_res = 0
-            for s in sc:
-                inter_res = inter_res + ((f**(len(s))) * (1-f)**(length-len(s)))
-            if(inter_res > res):
-                res = inter_res
-        print("mu = ",res) 
-    else:
-        res = 0
-        for s in scenarios:
-            res = res + ((f**(len(s))) * (1-f)**(length-len(s)))
-        print("mu = ",res) 
-
-        file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.s)+"_"+str(args.p), "w")
+        file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.s)+"_CRP", "w")
         file.write(str(len(scenarios)) +  "\n")
         for s in scenarios:
             line = str(len(s))+", "
@@ -314,6 +318,30 @@ def main():
             line = line + s[-1]
             file.write(line+"\n")
         file.close()
+
+    else:
+        length, input_combs, scenarios = c.get_uncorrected_faulty_combs_CRPC(args.k, set)
+        file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.s)+"_CRPC", "w")
+        file.write(str(len(input_combs)) +  "\n")
+        for i in range(len(input_combs)):
+
+            line = str(len(input_combs[i]))+", "
+            for e in input_combs[i][:-1]:
+                line = line + e + ", "
+            line = line + input_combs[i][-1]
+            file.write(line+"\n")
+
+            file.write(str(len(scenarios[i])) +  "\n")
+
+            for s in scenarios[i]:
+                line = str(len(s))+", "
+                for e in s[:-1]:
+                    line = line + e + ", "
+                line = line + s[-1]
+                file.write(line+"\n")
+
+        file.close()
+        
 
 
 if __name__ == "__main__":

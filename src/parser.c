@@ -639,7 +639,6 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
   if(fv){
     for(int i=0; i<fv->length; i++){
       if(str_map_contains(positions_map, fv->vars[i]->name)){
-        printf("%s\n", fv->vars[i]->name);
         int idx = str_map_get(positions_map, fv->vars[i]->name);
         split[idx] = false;
         fault_idx[idx] = 1ULL << i;
