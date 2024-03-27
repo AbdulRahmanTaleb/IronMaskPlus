@@ -116,9 +116,9 @@ void parse_eq_str(EqList* eqs, char* str) {
     str += 2;
     skip_spaces(str);
     // Removing the final ']'
-    int idx = strlen(str)-1;
-    while (idx > 0 && is_space(str[idx])) idx--;
-    if (str[idx] != ']') {
+    size_t idx = 0;
+    while ((idx < strlen(str)) && (str[idx] != ']')) idx++;
+    if (idx == strlen(str)) {
       fprintf(stderr, "Invalid line: '![' without matching ']'.\n"
               "Reminder: the closing ']' must be the last non-space character of the line.\n"
               "Exiting.");
@@ -756,8 +756,11 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
         dep = left->std_dep;
         memcpy(original_deps[add_idx], left->original_dep, deps_size * sizeof(*original_deps[add_idx]));
         if(e->correction_output){
-          fprintf(stderr, "Unsupported format for assignment correction output variable %s\n", e->dst);
-          exit(EXIT_FAILURE);
+          // fprintf(stderr, "Unsupported format for assignment correction output variable %s\n", e->dst);
+          // exit(EXIT_FAILURE);
+          handle_faulted_correction_output(eqs, fault_idx, split, 
+                                         add_idx, corr_output_idx, dep, deps,
+                                         fv, original_deps, deps_size);
         }
       }
       else if (e->expr->op == Add) {

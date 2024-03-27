@@ -1,14 +1,13 @@
-#ORDER 2
-#SHARES 2
-#IN a b 
-#RANDOMS r0 r1
+#SHARES 3
+#IN a
+#RANDOMS r01 r02 r12
 #OUT c
 
-
-tmp1 = a0 + r0
-tmp3 = tmp1 + r1
-c0 = tmp3 + b0
-
-tmp2 = a1 + r1
-tmp4 = tmp2 + r0
-c1 = tmp4 + b1
+tmp = a0 + a1
+tmp = tmp + r02
+c0 = tmp + r01
+c0 = c0 + a1
+c1 = a1 + r01
+c1 = c1 + r12
+c2 = a2 + r02
+c2 = c2 + r12

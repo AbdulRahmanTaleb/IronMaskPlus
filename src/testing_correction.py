@@ -118,7 +118,12 @@ class Circuit:
         self.evaluate_over_R, self.evaluate_outputs_over_R = self.evaluate_circuit()
     
     def evaluate_circuit(self, faults=[], set=True):
-        R = BooleanPolynomialRing(names=self.boolean_vars)
+        new_vars = []
+        for v in self.input_name_from_duplicate:
+            if(v in faults):
+                new_vars.append(v)
+
+        R = BooleanPolynomialRing(names=self.boolean_vars + new_vars)
         evaluate_over_R = dict()
         for v in self.randoms+['0','1']:
             if(v in faults):
@@ -130,13 +135,10 @@ class Circuit:
                 evaluate_over_R[v] = R(v)
 
         for v in self.input_name_from_duplicate:
-            if(v in faults):
-                if(set):
-                    evaluate_over_R[v] = R(1)
-                else:
-                    evaluate_over_R[v] = R(0)
-            else:
+            if(v not in faults):
                 evaluate_over_R[v] = R(self.input_name_from_duplicate[v])
+            else:
+                evaluate_over_R[v] = R(v)
 
         for k in self.eqs:
             if(k.dst in faults):
@@ -189,24 +191,25 @@ class Circuit:
         if(input_idx >= len(self.inputs)):
             return []
         
-        combs = self.get_input_comb_rec(input_idx +1)
-        capacity = (self.nb_duplications-1)//2
+        old_combs = self.get_input_comb_rec(input_idx +1)
+        print(old_combs)
 
+        capacity = (self.nb_duplications-1)//2
         names = []
         for j in range(self.nb_duplications):
             names.append(self.inputs[input_idx] + "_" + str(j))
         
         new_combs = []
-        new_combs.append([])
         for  cap in range(1,capacity+1):
             for comb in itertools.combinations(names, cap):
-                if(len(combs) == 0):
-                    new_combs.append(list(comb))
-                else:
-                    for c in combs:
-                        new_combs.append(list(c) + list(comb))
+                new_combs.append(list(comb))
 
-        return new_combs
+        final_combs = old_combs + new_combs
+        for comb1 in old_combs:
+            for comb2 in new_combs:
+                final_combs.append(comb1 + comb2)
+
+        return final_combs
 
     
     def get_input_combs(self):
@@ -255,16 +258,14 @@ class Circuit:
         length = len(self.eqs) + len(self.randoms) + len(self.eqs_outputs)
 
         input_combs = self.get_input_combs()
-        e = input_combs.pop(0)
-        assert(len(e) == 0)
-        print("len input combs = ", len(input_combs))
+        print("len input combs = ", len(input_combs), " for ", length, "intermediate variables")
 
         scenarios = dict()
         l = 0
         for prefix in input_combs:
             print("########### Input faults = ", prefix)
             sc = []
-            for i in range(1,k+1):
+            for i in range(k+1):
                 print("Testing combinations of ", i," faults...")
                 for comb in itertools.combinations(names, i):
                     comb_rands = []
@@ -282,6 +283,7 @@ class Circuit:
 
             scenarios[l] = sc
             l += 1
+        
 
         return length, input_combs, scenarios
 
@@ -320,27 +322,59 @@ def main():
         file.close()
 
     else:
+        f = 0.01
+        mus = []
+        total = 0
         length, input_combs, scenarios = c.get_uncorrected_faulty_combs_CRPC(args.k, set)
         file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.s)+"_CRPC", "w")
         file.write(str(len(input_combs)) +  "\n")
         for i in range(len(input_combs)):
+            mu = 0
 
             line = str(len(input_combs[i]))+", "
             for e in input_combs[i][:-1]:
                 line = line + e + ", "
             line = line + input_combs[i][-1]
             file.write(line+"\n")
-
-            file.write(str(len(scenarios[i])) +  "\n")
+            
+            if(len(scenarios[i][0]) == 0):
+                file.write(str(len(scenarios[i]) - 1) + "\n")
+                file.write(" 1\n")
+            else:
+                file.write(str(len(scenarios[i])) + "\n")
+                file.write(" 0\n")
+            
+            
 
             for s in scenarios[i]:
+                mu = mu + ((f ** len(s)) * ((1-f) ** (length - len(s))))
+                total += 1
+                if(len(s) == 0):
+                    continue
                 line = str(len(s))+", "
                 for e in s[:-1]:
                     line = line + e + ", "
                 line = line + s[-1]
                 file.write(line+"\n")
-
+            
+            mus.append(mu)
+        
+        print("########### No input faults")
+        length, scenarios = c.get_uncorrected_faulty_combs_CRP(args.k, set)
+        file.write(str(len(scenarios)) +  "\n")
+        mu = 0
+        for s in scenarios:
+            mu = mu + ((f ** len(s)) * ((1-f) ** (length - len(s))))
+            total += 1
+            line = str(len(s))+", "
+            for e in s[:-1]:
+                line = line + e + ", "
+            line = line + s[-1]
+            file.write(line+"\n")
+        mus.append(mu)
         file.close()
+        # print("total =", total)
+        # print(mus)
         
 
 

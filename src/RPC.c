@@ -119,7 +119,8 @@ void compute_RPC_coeffs(Circuit* circuit, int cores, int coeff_max,
   printf("pmin = %.10f -- log2(pmin) = %.10f\n", p_min, log2(p_min));
   printf("\n");
 
-  get_failure_proba(coeffs, circuit->total_wires+1, 0.01);
+  // get_failure_proba(coeffs, circuit->total_wires+1, 0.01, -1);
+  // get_failure_proba(coeffs, circuit->total_wires+1, 0.01, coeff_max);
 
 
   // Freeing stuffs

@@ -242,11 +242,17 @@ double compute_leakage_proba(uint64_t* coeffs, int last_precise_coeff, int len,
   return (p_inf+p_sup)/2;
 }
 
-void get_failure_proba(uint64_t* coeffs, int len, double p){
+void get_failure_proba(uint64_t* coeffs, int len, double p, int coeff_max){
   mpf_t coeffs_max[len];
 
   for (int i = 0; i < len; i++) {
     mpf_init_set_ui(coeffs_max[i], coeffs[i]);
+  }
+
+  if(coeff_max != -1){
+    for (int i = coeff_max+1; i < len; i++) {
+      n_choose_k_gmp(i, len-1, coeffs_max[i]);
+    }
   }
 
   mpf_t fp;

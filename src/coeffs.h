@@ -15,7 +15,7 @@ void initialize_table_coeffs();
 double compute_leakage_proba(uint64_t* coeffs, int last_precise_coeff, int len,
                              int min_max, bool square_root);
 
-void get_failure_proba(uint64_t* coeffs, int len, double p);
+void get_failure_proba(uint64_t* coeffs, int len, double p, int coeff_max);
 
 
 void compute_combined_intermediate_leakage_proba(uint64_t* coeffs, int k, int total, int coeffs_size, double p, double f, mpf_t res, int c_max);
