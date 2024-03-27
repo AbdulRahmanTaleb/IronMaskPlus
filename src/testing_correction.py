@@ -3,6 +3,7 @@ from sage.all import *
 import argparse
 import copy
 import itertools
+import time
 
 class Equation:
     def __init__(self, args):
@@ -308,6 +309,8 @@ def main():
     if(args.s == 0):
         set = False
 
+    start = time.time()
+
     if(args.p == "CRP"):
         length, scenarios = c.get_uncorrected_faulty_combs_CRP(args.k, set)
 
@@ -375,6 +378,9 @@ def main():
         file.close()
         # print("total =", total)
         # print(mus)
+
+    end = time.time()
+    print("Total computation time = ", end-start," seconds")
         
 
 
