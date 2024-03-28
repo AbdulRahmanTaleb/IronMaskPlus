@@ -345,16 +345,40 @@ void compute_CRP_val(ParsedFile * pf, int coeff_max, int k, double pleak, double
 
   compute_combined_mu_max(k, length, pfault, mu_max);
 
-  compute_combined_final_proba(epsilon, mu);
-  compute_combined_final_proba(epsilon_max, mu_max);
+  mpf_t tmp;
+  mpf_t gamma, gamma_max;
+
+  mpf_inits(gamma, gamma_max, NULL);
+
+  mpf_set(gamma, mu);
+  mpf_add(gamma, gamma, epsilon);
+
+  mpf_set(gamma_max, mu_max);
+  mpf_add(gamma_max, gamma_max, epsilon_max);
+
+  // compute 1 / (1-mu)
+  mpf_init_set_d(tmp, 1);
+  mpf_sub (tmp, tmp, mu);
+  mpf_ui_div(tmp, 1, tmp);
+  mpf_mul(epsilon, epsilon, tmp);
+
+  mpf_init_set_d(tmp, 1);
+  mpf_sub (tmp, tmp, mu_max);
+  mpf_ui_div(tmp, 1, tmp);
+  mpf_mul(epsilon_max, epsilon_max, tmp);
+
+  mpf_clear(tmp);
+
   printf("\n\n");
   gmp_printf("pfault = %.2lf, pleak = %.2lf:\n\n", pfault, pleak);
-  gmp_printf("mu min      = %.10Ff\n", mu);
   gmp_printf("epsilon min = %.10Ff\n", epsilon);
+  gmp_printf("mu min = %.10Ff\n", mu);
+  gmp_printf("gamma min = %.10Ff\n\n", gamma);
 
-  gmp_printf("\nmu max      = %.10Ff\n", mu_max);
   gmp_printf("epsilon max = %.10Ff\n", epsilon_max);
-  mpf_clear(epsilon);
-  mpf_clear(mu);
+  gmp_printf("mu max = %.10Ff\n", mu_max);
+  gmp_printf("gamma max = %.10Ff\n", gamma_max);
+
+  mpf_clears(epsilon, epsilon_max, mu, mu_max, gamma,gamma_max, NULL);
   
 }

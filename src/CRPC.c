@@ -600,17 +600,16 @@ void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak
     }
   }
 
-  gmp_printf("\nepsilon min = %.10Ff\n", epsilon[idx_max]);
+  printf("\n\n");
+  gmp_printf("pfault = %.2lf, pleak = %.2lf:\n\n", pfault, pleak);  
+
+  gmp_printf("epsilon min = %.10Ff\n", epsilon[idx_max]);
   gmp_printf("mu min = %.10Ff\n", mu[idx_max]);
   gmp_printf("gamma min = %.10Ff\n\n", gamma[idx_max]);
 
   gmp_printf("epsilon max = %.10Ff\n", epsilon_max[idx_max]);
   gmp_printf("mu max = %.10Ff\n", mu_max[idx_max]);
   gmp_printf("gamma max = %.10Ff\n", gamma_max[idx_max]);
-
-  // for(int i=1; i<nb_input_combs+1; i++){
-  //   gmp_printf("mu = %.10Ff, ", mu[i]);
-  // }
 
   fclose(coeffs_file);
   fclose(faulty_combs_file);
