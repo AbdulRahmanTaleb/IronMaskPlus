@@ -2,5 +2,4 @@ ironmask
 *.o
 *~
 .DS_Store
-*faulty_scenarios*
 *coeffs*
