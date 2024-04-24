@@ -245,7 +245,28 @@ class Circuit:
                     scenarios.append(comb)
 
         return length, scenarios
+    
+    def compute_mu_CRP(self, file, k, set, pf):
+        names = []
+        for e in self.eqs:
+            names.append(e.dst)
+        for e in self.randoms:
+            names.append(e)
+        for e in self.eqs_outputs:
+            names.append(e.dst)
 
+        length = len(self.eqs) + len(self.randoms) + len(self.eqs_outputs)
+
+        f = open(file+"_faulty_scenarios_k"+str(k)+"_f"+str(set)+"_CRP", "r")
+        lines = f.readlines()
+        f.close()
+        nb = int(lines[0])
+        mu = 0
+        for i in range(nb):
+            args = lines[i+1].split(",")
+            size = int(args[0])
+            mu = mu + ((pf ** size) * ((1 - pf) ** (length - size)))
+        return mu
 
     def get_uncorrected_faulty_combs_CRPC(self, k ,set):
         names = []
@@ -263,8 +284,10 @@ class Circuit:
 
         scenarios = dict()
         l = 0
+        idx = 0
         for prefix in input_combs:
-            print("########### Input faults = ", prefix)
+            print("########### Input faults ", idx," = ", prefix)
+            idx += 1
             sc = []
             for i in range(k+1):
                 print("Testing combinations of ", i," faults...")
@@ -297,6 +320,7 @@ def main():
     parser.add_argument("-k", help="Number of faults to consider", type=int)
     parser.add_argument("-s", help="Type of faults (0:reset, 1:set)", type=int, default = 1)
     parser.add_argument("-p", help="Property", type=str, choices=["CRP","CRPC"], default="CRP")
+    parser.add_argument("--fault", help="fault proba", type=float)
     args = parser.parse_args()
 
     c = Circuit(args.f)
@@ -312,17 +336,21 @@ def main():
     start = time.time()
 
     if(args.p == "CRP"):
-        length, scenarios = c.get_uncorrected_faulty_combs_CRP(args.k, set)
+        if(args.fault is not None):
+            mu = c.compute_mu_CRP(args.f, args.k, args.s, args.fault)
+            print("mu = ", mu)
+        else:
+            length, scenarios = c.get_uncorrected_faulty_combs_CRP(args.k, set)
 
-        file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.s)+"_CRP", "w")
-        file.write(str(len(scenarios)) +  "\n")
-        for s in scenarios:
-            line = str(len(s))+", "
-            for e in s[:-1]:
-                line = line + e + ", "
-            line = line + s[-1]
-            file.write(line+"\n")
-        file.close()
+            file = open(args.f+"_faulty_scenarios_k"+str(args.k)+"_f"+str(args.s)+"_CRP", "w")
+            file.write(str(len(scenarios)) +  "\n")
+            for s in scenarios:
+                line = str(len(s))+", "
+                for e in s[:-1]:
+                    line = line + e + ", "
+                line = line + s[-1]
+                file.write(line+"\n")
+            file.close()
 
     else:
         f = 0.01
