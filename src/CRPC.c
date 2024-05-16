@@ -203,8 +203,8 @@ void compute_CRPC_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, int t
       }
     }
 
-    // No internal faults
-    if(!no_internal_faults_scenario_fails){
+    // No internal faults 
+    if((i < nb_input_combs) && (!no_internal_faults_scenario_fails)){
       printf("################ Cheking CRPC with faults on ");
       Faults * fv = malloc(sizeof(*fv));
       FaultedVar ** v = malloc((size_input_comb) * sizeof(*v));
@@ -234,7 +234,7 @@ void compute_CRPC_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, int t
       for (int size = 0; size <= coeff_max; size++) {
 
         for (unsigned int l = 0; l < out_comb_len; l++) {
-          construct_output_prefix(c, pf->out, out_comb_arr[l], out_comb, t);
+          construct_output_prefix(circuit, pf->out, out_comb_arr[l], out_comb, t);
           verif_prefix.content = out_comb;
           data.coeffs = coeffs_out_comb[l];
 
@@ -331,7 +331,7 @@ void compute_CRPC_coeffs(ParsedFile * pf, int cores, int coeff_max, int k, int t
         for (int size = 0; size <= coeff_max; size++) {
 
           for (unsigned int l = 0; l < out_comb_len; l++) {
-            construct_output_prefix(c, pf->out, out_comb_arr[l], out_comb, t);
+            construct_output_prefix(circuit, pf->out, out_comb_arr[l], out_comb, t);
             verif_prefix.content = out_comb;
             data.coeffs = coeffs_out_comb[l];
 
@@ -507,7 +507,7 @@ void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak
     }
 
      // No internal faults
-    if(!no_internal_faults_scenario_fails){
+    if((i < nb_input_combs) && (!no_internal_faults_scenario_fails)){
       uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
       fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
 

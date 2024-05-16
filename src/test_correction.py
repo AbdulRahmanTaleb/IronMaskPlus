@@ -393,6 +393,7 @@ def main():
         print("########### No input faults")
         length, scenarios = c.get_uncorrected_faulty_combs_CRP(args.k, set)
         file.write(str(len(scenarios)) +  "\n")
+        file.write(" 0\n")
         mu = 0
         for s in scenarios:
             mu = mu + ((f ** len(s)) * ((1-f) ** (length - len(s))))
