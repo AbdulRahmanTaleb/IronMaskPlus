@@ -507,17 +507,19 @@ void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak
     }
 
      // No internal faults
-    if((i < nb_input_combs) && (!no_internal_faults_scenario_fails)){
-      uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
-      fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
+    if(i < nb_input_combs){
+      if(!no_internal_faults_scenario_fails){
+        uint64_t * coeffs = calloc(total_wires+1, sizeof(*coeffs));
+        fread(coeffs, sizeof(*coeffs), total_wires+1, coeffs_file);
 
-      compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, pleak, pfault, epsilon[i], -1);
-      compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, pleak, pfault, epsilon_max[i], coeff_max);
-      free(coeffs);
-    }
-    else{
-      compute_combined_intermediate_mu(0, length, pfault, mu[i]);
-      compute_combined_intermediate_mu(0, length, pfault, mu_max[i]);
+        compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, pleak, pfault, epsilon[i], -1);
+        compute_combined_intermediate_leakage_proba(coeffs, 0, length, total_wires+1, pleak, pfault, epsilon_max[i], coeff_max);
+        free(coeffs);
+      }
+      else{
+        compute_combined_intermediate_mu(0, length, pfault, mu[i]);
+        compute_combined_intermediate_mu(0, length, pfault, mu_max[i]);
+      }
     }
     
     for(int f=1; f<=k; f++){
@@ -569,6 +571,7 @@ void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak
     }
     
     free_faults_combs(sfc);
+
 
     compute_combined_mu_max(k, length, pfault, mu_max[i]);
 
