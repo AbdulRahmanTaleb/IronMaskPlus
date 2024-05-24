@@ -16,7 +16,6 @@
 #include "constructive.h"
 
 
-
 struct callback_data {
   uint64_t* coeffs;
   int t;
