@@ -604,7 +604,7 @@ void compute_CRPC_val(ParsedFile * pf, int coeff_max, int k, int t, double pleak
   }
 
   printf("\n\n");
-  gmp_printf("pfault = %.2lf, pleak = %.2lf:\n\n", pfault, pleak);  
+  gmp_printf("pfault = %.10Ff, pleak = %.10Ff:\n\n", pfault, pleak);  
 
   gmp_printf("epsilon min = %.10Ff\n", epsilon[idx_max]);
   gmp_printf("mu min = %.10Ff\n", mu[idx_max]);

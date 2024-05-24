@@ -35,7 +35,7 @@ void compute_tree2(Array current_uple, uint64_t* coeffs, int nb_occ_tuple) {
     coeffs[nb_occ_tuple+1] += 1;
     return;
   }
-  int lst[nb_occ_tuple+1]; // TODO: is this large enough??
+  uint64_t lst[nb_occ_tuple+1]; // TODO: is this large enough??
   int nmin = 1;
   int nmax = current_uple.content[0];
   for (int i = 1; (unsigned long)i < current_uple.content[0] + 1; i++) {
@@ -312,7 +312,7 @@ void compute_combined_intermediate_leakage_proba(uint64_t* coeffs, int k, int to
     mpf_pow_ui(tmp, tmp, i);
 
     mpf_init_set_d(tmp2, 1.0-p);
-    mpf_pow_ui(tmp2, tmp2, coeffs_size-i);
+    mpf_pow_ui(tmp2, tmp2, coeffs_size-i-1);
 
     mpf_mul(tmp, tmp, coeffs_mpf[i]);
     mpf_mul(tmp, tmp, tmp2);
