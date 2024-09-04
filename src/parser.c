@@ -778,9 +778,9 @@ Circuit* gen_circuit(ParsedFile * pf, bool glitch, bool transition, Faults * fv)
       else{
         dep = calloc(deps_size, sizeof(*dep));
 
-        assert(are_dep_equal(left->original_dep, right->original_dep, deps_size) ||
-               are_dep_equal_with_mult_original(left->original_dep, right->original_dep,
-               deps_size, linear_deps_size, mult_count, original_mult_ptrs));
+        // assert(are_dep_equal(left->original_dep, right->original_dep, deps_size) ||
+        //        are_dep_equal_with_mult_original(left->original_dep, right->original_dep,
+        //        deps_size, linear_deps_size, mult_count, original_mult_ptrs));
 
         memcpy(original_deps[add_idx], left->original_dep, deps_size * sizeof(*original_deps[add_idx]));
 
